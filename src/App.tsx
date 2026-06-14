@@ -4,6 +4,7 @@ import { StatusPanel } from './components/StatusPanel';
 import { GaugePanel } from './components/GaugePanel';
 import { ScopePanel } from './components/ScopePanel';
 import BurstScopePanel from './components/BurstScopePanel';
+import { DiagnosePanel } from './components/DiagnosePanel';
 import { ControlPanel } from './components/ControlPanel';
 import { ThrottleSlider } from './components/ThrottleSlider';
 import { ProfileSelector } from './components/ProfileSelector';
@@ -12,8 +13,12 @@ import { ParamModal } from './components/ParamModal';
 import { FallingZcSimPanel } from './components/FallingZcSimPanel';
 import { HelpPanel } from './components/HelpPanel';
 import { MonitorPanel } from './components/MonitorPanel';
+import { SectorBarsPanel } from './components/SectorBarsPanel';
+import { OperatingMapPanel } from './components/OperatingMapPanel';
+import { ZcLabPanel } from './components/ZcLabPanel';
+import { LiveTunePanel } from './components/LiveTunePanel';
 import { WizardPanel } from './components/WizardPanel';
-import { ConsolePanel } from './components/ConsolePanel';
+import { ConsoleDock } from './components/ConsoleDock';
 import { useEscStore, type TabId } from './store/useEscStore';
 import { ESC_STATES, FAULT_CODES, BOARD_NAMES } from './protocol/types';
 
@@ -43,9 +48,10 @@ const NAV: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Mission Control', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
   { id: 'scope', label: 'Scope', icon: 'M2 12h4l3-9 4 18 3-9h4' },
   { id: 'sim', label: 'ZC Sim', icon: 'M3 3v18h18M7 14l3-4 3 3 4-6' },
+  { id: 'zclab', label: 'ZC Lab', icon: 'M9 3h6v2l-1 1v4l4 7a2 2 0 01-2 3H8a2 2 0 01-2-3l4-7V6L9 5z' },
+  { id: 'tune', label: 'Live Tune', icon: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6' },
   { id: 'wizard', label: 'Motor Wizard', icon: 'M5 3l1.5 4L11 8.5 6.5 10 5 14l-1.5-4L-1 8.5M5 3M14 7l1 3 3 1-3 1-1 3-1-3-3-1 3-1z' },
   { id: 'params', label: 'Parameters', icon: 'M12 3v18M3 12h18M7.5 7.5l9 9M16.5 7.5l-9 9' },
-  { id: 'console', label: 'Console', icon: 'M4 5h16v14H4zM7 9l3 3-3 3M13 15h4' },
   { id: 'help', label: 'Help', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 14v-2m0-4a2 2 0 114 0c0 1.5-2 2-2 3' },
 ];
 
@@ -169,9 +175,15 @@ function DashboardTab() {
   return (
     <>
       <MonitorPanel />
+      <div style={{ marginTop: 14 }}>
+        <SectorBarsPanel />
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 14, marginTop: 14 }}>
         <StatusPanel />
         <GaugePanel />
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <OperatingMapPanel />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
         <ControlPanel />
@@ -182,10 +194,11 @@ function DashboardTab() {
   );
 }
 
-function ScopeTab() { return (<><ScopePanel /><BurstScopePanel /></>); }
+function ScopeTab() { return (<><ScopePanel /><BurstScopePanel /><DiagnosePanel /></>); }
 function SimTab() { return <FallingZcSimPanel />; }
+function ZcLabTab() { return <ZcLabPanel />; }
+function TuneTab() { return <LiveTunePanel />; }
 function WizardTab() { return <WizardPanel />; }
-function ConsoleTab() { return <ConsolePanel />; }
 function ParamsTab() { return <ParamPanel />; }
 function HelpTab() { return <HelpPanel alwaysExpanded />; }
 
@@ -199,9 +212,10 @@ export default function App() {
       case 'dashboard': return <DashboardTab />;
       case 'scope': return <ScopeTab />;
       case 'sim': return <SimTab />;
+      case 'zclab': return <ZcLabTab />;
+      case 'tune': return <TuneTab />;
       case 'wizard': return <WizardTab />;
       case 'params': return <ParamsTab />;
-      case 'console': return <ConsoleTab />;
       case 'help': return <HelpTab />;
       default: return <DashboardTab />;
     }
@@ -212,11 +226,12 @@ export default function App() {
       <NavRail />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <TopHud />
-        <main style={{ flex: 1, overflow: 'auto', padding: '18px 22px' }}>
+        <main style={{ flex: 1, overflow: 'auto', padding: '18px 22px', minHeight: 0 }}>
           <div style={{ maxWidth: 1320, margin: '0 auto', animation: 'fadeIn 0.25s ease-out' }} key={activeTab}>
             <ErrorBoundary>{renderTab()}</ErrorBoundary>
           </div>
         </main>
+        <ConsoleDock />
       </div>
 
       <ParamModal />

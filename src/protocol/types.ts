@@ -311,6 +311,7 @@ export const FEATURE_NAMES: Record<number, string> = {
 
 export const FEATURE_BIT_FOC = 23;
 export const FEATURE_BIT_BURST_SCOPE = 24;
+export const FEATURE_BIT_LIVE_TUNE = 25;
 
 export interface GspRxStatus {
   linkState: number;
@@ -337,6 +338,13 @@ export function isV4Firmware(featureFlags: number): boolean {
 /** Helper: check if burst scope is enabled */
 export function isBurstScopeEnabled(featureFlags: number): boolean {
   return (featureFlags & (1 << FEATURE_BIT_BURST_SCOPE)) !== 0;
+}
+
+/** Helper: firmware allows the safe ISR-live 6-step knobs to be SET while
+ * spinning (FEATURE_LIVE_TUNE, bit 25). When false, those sliders are
+ * stop-to-change. */
+export function isLiveTuneEnabled(featureFlags: number): boolean {
+  return (featureFlags & (1 << FEATURE_BIT_LIVE_TUNE)) !== 0;
 }
 
 /* ── Burst Scope Types ─────────────────────────────────────────── */

@@ -32,6 +32,44 @@ const GROUP_COLORS: Record<number, string> = {
   10: '#f472b6', // FOC Startup - pink
 };
 
+/** Startup amplitude/duty params whose value implies a peak current (match by
+ * variable name — mirrors the Python AMPLITUDE_PARAMS / DUTY_PARAMS sets). */
+const AMPLITUDE_PARAMS = new Set(['sineAlignModPct', 'sineRampModPct']); // peak = pct/200
+const DUTY_PARAMS = new Set(['rampDutyPct', 'alignDutyPct', 'clIdleDutyPct']); // = pct/100
+
+/** Find a param value by its variable name (from "Display [variable]"). */
+function paramValueByVar(
+  params: Map<number, { descriptor: { id: number; min: number; max: number; group: number }; value: number }>,
+  wanted: string,
+): number | null {
+  for (const [id, pv] of params) {
+    const m = PARAM_NAMES[id]?.match(/\[([^\]]+)\]/);
+    if (m && m[1] === wanted) return pv.value;
+  }
+  return null;
+}
+
+/** Estimated peak current (A) a startup amplitude/duty value implies, else null.
+ * peak ≈ frac × Vbus / R_pp ; R_pp ≈ 2 × focRsMilliOhm/1000. Mirrors Python _est_current. */
+function estCurrent(
+  varName: string,
+  val: number,
+  params: Map<number, { descriptor: { id: number; min: number; max: number; group: number }; value: number }>,
+  vbus: number | null,
+): number | null {
+  if (!Number.isFinite(val)) return null;
+  const rs = paramValueByVar(params, 'focRsMilliOhm');
+  if (!rs) return null;
+  const rpp = (2.0 * rs) / 1000.0;
+  if (rpp <= 0) return null;
+  const vb = vbus && vbus > 0 ? vbus : 24.0;
+  let frac: number;
+  if (AMPLITUDE_PARAMS.has(varName)) frac = val / 200.0;
+  else if (DUTY_PARAMS.has(varName)) frac = val / 100.0;
+  else return null;
+  return (frac * vb) / rpp;
+}
+
 /** Groups that apply to both FOC and 6-step */
 const COMMON_GROUPS = new Set([2, 5, 7]); // Current Protection, Voltage Protection, Motor Hardware
 /** Groups that only apply to 6-step */
@@ -43,9 +81,29 @@ export function ParamPanel() {
   const { connected, snapshot, params, info } = useEscStore();
   const [editValues, setEditValues] = useState<Record<number, string>>({});
   const [hoveredParam, setHoveredParam] = useState<number | null>(null);
+  const [filter, setFilter] = useState('');
   const isIdle = !snapshot || snapshot.state === 0;
   const editable = connected && isIdle;
   const focMode = info ? isFocEnabled(info.featureFlags) : false;
+
+  // Live Vbus (V) from the snapshot + OC soft limit (A) for the est-current annotation.
+  const vbusV = snapshot ? (snapshot.vbusRaw * 3.3 / 4096) * 19.8 : null;
+  const ocSwMa = paramValueByVar(params, 'ocSwLimitMa');
+  const ocLimitA = ocSwMa ? ocSwMa / 1000.0 : null;
+
+  // Filter predicate — treat input as a regex (case-insensitive), fall back to
+  // substring if the regex is invalid. Matches display name OR variable name.
+  const filterMatch = (() => {
+    const q = filter.trim();
+    if (!q) return (_display: string, _varName: string) => true;
+    let re: RegExp | null = null;
+    try { re = new RegExp(q, 'i'); } catch { re = null; }
+    const lq = q.toLowerCase();
+    return (display: string, varName: string) => {
+      if (re) return re.test(display) || re.test(varName);
+      return display.toLowerCase().includes(lq) || varName.toLowerCase().includes(lq);
+    };
+  })();
 
   const setParam = useCallback(async (id: number, value: number) => {
     const buf = new Uint8Array(6);
@@ -145,6 +203,37 @@ export function ParamPanel() {
         </div>
       </div>
 
+      {/* Filter box — mirrors the desktop Tune-tab filter (regex or substring,
+          matches display name or variable name, case-insensitive) */}
+      <div style={{ marginBottom: 12, position: 'relative' }}>
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter parameters by name or variable (regex)…"
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '7px 30px 7px 12px',
+            borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+            background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12,
+            fontFamily: 'var(--font-mono)',
+          }}
+        />
+        {filter && (
+          <button
+            onClick={() => setFilter('')}
+            style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              width: 20, height: 20, borderRadius: 'var(--radius-sm)', border: 'none',
+              background: 'transparent', color: 'var(--text-muted)', fontSize: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            title="Clear filter"
+          >
+            {'×'}
+          </button>
+        )}
+      </div>
+
       {!isIdle && connected && (
         <div style={{
           color: 'var(--accent-yellow)', marginBottom: 10, fontSize: 12,
@@ -167,7 +256,13 @@ export function ParamPanel() {
           { label: '6-Step Parameters', desc: focMode ? 'Inactive in FOC mode' : 'Active in 6-Step mode', groups: sixStepGroups, dimmed: focMode },
           ...(!focMode ? [{ label: 'FOC Parameters', desc: 'Inactive in 6-Step mode', groups: focGroups, dimmed: true }] : []),
         ];
-        return sections.map(section => section.groups.length > 0 && (
+        const sectionMatchCount = (sec: { groups: typeof sortedGroups }) =>
+          sec.groups.reduce((acc, [, items]) =>
+            acc + items.filter(([id]) => {
+              const { display, varName } = parseName(id);
+              return filterMatch(display, varName);
+            }).length, 0);
+        return sections.map(section => sectionMatchCount(section) > 0 && (
           <div key={section.label} style={{ marginBottom: 16 }}>
             <div style={{
               display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8,
@@ -186,8 +281,13 @@ export function ParamPanel() {
               display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12,
               opacity: section.dimmed ? 0.5 : 1, transition: 'opacity 0.3s',
             }}>
-        {section.groups.map(([group, items]) => {
+        {section.groups.map(([group, allItems]) => {
           const groupColor = GROUP_COLORS[group] ?? 'var(--accent-blue)';
+          const items = allItems.filter(([id]) => {
+            const { display, varName } = parseName(id);
+            return filterMatch(display, varName);
+          });
+          if (items.length === 0) return null;
           return (
             <div key={group} style={{
               background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -226,6 +326,13 @@ export function ParamPanel() {
                   const unit = PARAM_UNITS[id] ?? '';
                   const tooltip = PARAM_TOOLTIPS[id];
                   const isHovered = hoveredParam === id;
+
+                  // Estimated peak current for startup amplitude/duty params.
+                  const isCurrentParam = AMPLITUDE_PARAMS.has(varName) || DUTY_PARAMS.has(varName);
+                  const estA = isCurrentParam
+                    ? estCurrent(varName, Number(displayVal), params, vbusV)
+                    : null;
+                  const overOc = estA !== null && ocLimitA !== null && estA > ocLimitA;
 
                   return (
                     <div key={id} style={{
@@ -285,11 +392,30 @@ export function ParamPanel() {
                         </span>
                       </div>
                       <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
                         fontSize: 10, color: 'var(--text-muted)',
                         marginTop: 2, fontFamily: 'var(--font-mono)',
                       }}>
-                        {pv.descriptor.min} \u2013 {pv.descriptor.max}
+                        <span>{pv.descriptor.min} \u2013 {pv.descriptor.max}</span>
+                        {estA !== null && (
+                          <span style={{
+                            marginLeft: 'auto',
+                            color: overOc ? 'var(--accent-red)' : 'var(--accent-cyan)',
+                            fontWeight: overOc ? 700 : 400,
+                          }}>
+                            {'\u2248'} {estA.toFixed(1)} A
+                          </span>
+                        )}
                       </div>
+                      {overOc && estA !== null && ocLimitA !== null && (
+                        <div style={{
+                          marginTop: 4, padding: '3px 7px', borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                          color: 'var(--accent-red)', fontSize: 10, lineHeight: 1.4,
+                        }}>
+                          {'\u26a0'} {'\u2248'}{estA.toFixed(0)}A peak {'>'} OC soft limit {ocLimitA.toFixed(0)}A {'\u2014'} likely to trip OC_SW
+                        </div>
+                      )}
 
                       {/* Tooltip */}
                       {isHovered && tooltip && (

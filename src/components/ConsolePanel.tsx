@@ -3,6 +3,7 @@ import { useEscStore } from '../store/useEscStore';
 import { serial } from './ConnectionBar';
 import { buildPacket, CMD } from '../protocol/gsp';
 import { ESC_STATES, FAULT_CODES, PARAM_NAMES } from '../protocol/types';
+import { localDiagnose } from '../sim/diagnose';
 
 interface Line { t: number; text: string; kind: 'in' | 'out' | 'err' | 'sys' | 'telem'; }
 
@@ -17,13 +18,14 @@ function varName(id: number): string {
   return m ? m[1] : `0x${id.toString(16)}`;
 }
 
-export function ConsolePanel() {
+export function ConsolePanel({ fill = false }: { fill?: boolean } = {}) {
   const [lines, setLines] = useState<Line[]>([{ t: 0, text: 'Garuda Studio console — type "help".', kind: 'sys' }]);
   const [cmd, setCmd] = useState('');
   const [recording, setRecording] = useState(false);
   const recRef = useRef<any[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const lastMirror = useRef({ ms: 0, state: -1 });
+  const paused = useRef(false);   // gates the telemetry-mirror output (pause/resume)
   const store = useEscStore;
 
   const push = (text: string, kind: Line['kind'] = 'out') =>
@@ -39,7 +41,7 @@ export function ConsolePanel() {
       const now = Date.now();
       if (recording) recRef.current.push(rowOf(s, st.info?.pwmFrequency ?? 45000));
       const stateChanged = s.state !== lastMirror.current.state;
-      if (st.telemActive && (stateChanged || now - lastMirror.current.ms > 1000)) {
+      if (!paused.current && st.telemActive && (stateChanged || now - lastMirror.current.ms > 1000)) {
         if (s.state !== 0 || stateChanged) push(mirrorLine(s, st.info?.pwmFrequency ?? 45000), 'telem');
         lastMirror.current = { ms: now, state: s.state };
       }
@@ -55,8 +57,10 @@ export function ConsolePanel() {
     const arg = rest.join(' ');
     switch (c.toLowerCase()) {
       case 'help': case '?':
-        push('commands: help, clear, params, get <name>, set <name> <val>, reload, export, mark <txt>, rec, diagnose'); break;
+        push('commands: help, clear, pause, resume, params, get <name>, set <name> <val>, reload, export, mark <txt>, rec, diagnose'); break;
       case 'clear': setLines([]); break;
+      case 'pause': paused.current = true; push('(telemetry mirror paused)', 'sys'); break;
+      case 'resume': paused.current = false; push('(telemetry mirror resumed)', 'sys'); break;
       case 'params': {
         const p = store.getState().params;
         if (!p.size) { push('no params (connect + reload)', 'err'); break; }
@@ -124,22 +128,25 @@ export function ConsolePanel() {
     const st = store.getState();
     const hist = st.history;
     if (hist.length < 5) { push('not enough telemetry — let it run a few seconds', 'err'); return; }
+    const res = localDiagnose(hist, { info: st.info ?? undefined });
     push('— diagnosis —', 'sys');
-    const last = hist[hist.length - 1];
-    const faults = new Set(hist.map(h => h.faultCode).filter(f => f));
-    if (faults.size) push(`  faults seen: ${[...faults].map(f => FAULT_CODES[f] ?? f).join(', ')}`, 'err');
-    const maxIa = Math.max(...hist.map(h => h.iaPkMagA ?? 0));
-    if (maxIa > 18) push(`  ⚠ high phase current peak ${maxIa.toFixed(1)}A (OC region ~22A)`, 'err');
-    const idleIbus = Math.abs(last.ibusAvgA ?? 0);
-    if (last.state === 0 && idleIbus > 1) push(`  ⚠ bus current ${idleIbus.toFixed(1)}A at idle — possible sense offset`, 'err');
-    const rejHi = hist.slice(-30).some(h => (h.hwzcTotalMissCount ?? 0) > 0);
-    if (rejHi) push('  note: HWZC misses present — check ZC at the speed band where they spike');
-    if (!faults.size && maxIa <= 18) push('  ✓ no obvious faults in the recent window', 'out');
+    push(`  ${res.summary}`, res.severity === 'critical' ? 'err' : 'out');
+    if (res.findings.length === 0) {
+      push('  ✓ no obvious issues in the recent window', 'out');
+      return;
+    }
+    const sevKind: Record<string, Line['kind']> = { error: 'err', warn: 'out', info: 'sys' };
+    for (const f of res.findings) {
+      const kind = sevKind[f.severity] ?? 'out';
+      push(`  [${f.severity.toUpperCase()}] ${f.title}`, kind);
+      if (f.evidence) push(`      evidence: ${f.evidence}`, 'out');
+      if (f.fix) push(`      fix: ${f.fix}`, 'out');
+    }
   };
 
   return (
-    <div className="glass" style={{ padding: 14, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+    <div className={fill ? '' : 'glass'} style={{ padding: fill ? '8px 12px' : 14, display: 'flex', flexDirection: 'column', height: fill ? '100%' : 'calc(100vh - 130px)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <span className="hud-label">Console</span>
         <button onClick={toggleRec} className="glass glass-hover" style={{
           padding: '4px 12px', fontSize: 12, color: recording ? 'var(--accent-red)' : 'var(--accent-green)',

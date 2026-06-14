@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GspInfo, GspSnapshot, GspRxStatus, ParamDescriptor, ScopeSample, ScopeStatus } from '../protocol/types';
 
-export type TabId = 'dashboard' | 'scope' | 'sim' | 'wizard' | 'params' | 'console' | 'help';
+export type TabId = 'dashboard' | 'scope' | 'sim' | 'zclab' | 'tune' | 'wizard' | 'params' | 'console' | 'help';
 
 interface ParamValue {
   descriptor: ParamDescriptor;
@@ -54,7 +54,7 @@ interface EscStore {
   reset: () => void;
 }
 
-const MAX_HISTORY = 500; // 10s at 50Hz
+const MAX_HISTORY = 3000; // 60s at 50Hz (oscilloscope timebase up to 60s)
 
 let toastId = 0;
 
