@@ -11,6 +11,7 @@ import { ParamPanel } from './components/ParamPanel';
 import { ParamModal } from './components/ParamModal';
 import { FallingZcSimPanel } from './components/FallingZcSimPanel';
 import { HelpPanel, MicrochipIcon } from './components/HelpPanel';
+import { MonitorPanel } from './components/MonitorPanel';
 import { useEscStore, type TabId } from './store/useEscStore';
 import { BOARD_NAMES } from './protocol/types';
 
@@ -102,8 +103,11 @@ function TabBar() {
 function DashboardTab() {
   return (
     <>
-      {/* Top row: Status + Gauges */}
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16 }}>
+      {/* Desktop-style live monitor: state bar + readouts + multi-channel chart */}
+      <MonitorPanel />
+
+      {/* Secondary: compact status + gauges */}
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: 16, marginTop: 16 }}>
         <StatusPanel />
         <GaugePanel />
       </div>
