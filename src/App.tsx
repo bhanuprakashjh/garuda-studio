@@ -13,6 +13,7 @@ import { FallingZcSimPanel } from './components/FallingZcSimPanel';
 import { HelpPanel } from './components/HelpPanel';
 import { MonitorPanel } from './components/MonitorPanel';
 import { WizardPanel } from './components/WizardPanel';
+import { ConsolePanel } from './components/ConsolePanel';
 import { useEscStore, type TabId } from './store/useEscStore';
 import { ESC_STATES, FAULT_CODES, BOARD_NAMES } from './protocol/types';
 
@@ -44,6 +45,7 @@ const NAV: { id: TabId; label: string; icon: string }[] = [
   { id: 'sim', label: 'ZC Sim', icon: 'M3 3v18h18M7 14l3-4 3 3 4-6' },
   { id: 'wizard', label: 'Motor Wizard', icon: 'M5 3l1.5 4L11 8.5 6.5 10 5 14l-1.5-4L-1 8.5M5 3M14 7l1 3 3 1-3 1-1 3-1-3-3-1 3-1z' },
   { id: 'params', label: 'Parameters', icon: 'M12 3v18M3 12h18M7.5 7.5l9 9M16.5 7.5l-9 9' },
+  { id: 'console', label: 'Console', icon: 'M4 5h16v14H4zM7 9l3 3-3 3M13 15h4' },
   { id: 'help', label: 'Help', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 14v-2m0-4a2 2 0 114 0c0 1.5-2 2-2 3' },
 ];
 
@@ -183,6 +185,7 @@ function DashboardTab() {
 function ScopeTab() { return (<><ScopePanel /><BurstScopePanel /></>); }
 function SimTab() { return <FallingZcSimPanel />; }
 function WizardTab() { return <WizardPanel />; }
+function ConsoleTab() { return <ConsolePanel />; }
 function ParamsTab() { return <ParamPanel />; }
 function HelpTab() { return <HelpPanel alwaysExpanded />; }
 
@@ -198,6 +201,7 @@ export default function App() {
       case 'sim': return <SimTab />;
       case 'wizard': return <WizardTab />;
       case 'params': return <ParamsTab />;
+      case 'console': return <ConsoleTab />;
       case 'help': return <HelpTab />;
       default: return <DashboardTab />;
     }
