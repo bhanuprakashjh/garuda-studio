@@ -1,4 +1,4 @@
-import type { GspInfo, GspSnapshot, GspRxStatus, CkSnapshot, ParamDescriptor, ParamListPage } from './types';
+import type { GspInfo, GspSnapshot, GspRxStatus, ParamDescriptor, ParamListPage } from './types';
 
 export function decodeInfo(data: Uint8Array): GspInfo {
   const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -112,68 +112,6 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
     // 6-step AKESC v3 tail
     ibusInstA, ibusAvgA, ibusWinA, hwzcReject, iaPkMagA, ibPkMagA,
     cpuLoadPct, missBySector, snapBytes: n,
-  };
-}
-
-/** CK board snapshot: 48-64 bytes.
- *  v2 (52B): zcLatencyPct, zcBlankPct, zcBypassCount.
- *  v3 (64B): zcMode, actualForcedComm, per-polarity counters. */
-export function decodeCkSnapshot(data: Uint8Array): CkSnapshot {
-  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const hasDiag = data.byteLength >= 52;
-  const hasV3 = data.byteLength >= 64;
-  return {
-    state: v.getUint8(0),
-    faultCode: v.getUint8(1),
-    currentStep: v.getUint8(2),
-    ataStatus: v.getUint8(3),
-    potRaw: v.getUint16(4, true),
-    dutyPct: v.getUint8(6),
-    zcSynced: v.getUint8(7) !== 0,
-    vbusRaw: v.getUint16(8, true),
-    iaRaw: v.getInt16(10, true),
-    ibRaw: v.getInt16(12, true),
-    ibusRaw: v.getInt16(14, true),
-    duty: v.getUint16(16, true),
-    stepPeriod: v.getUint16(18, true),
-    stepPeriodHR: v.getUint16(20, true),
-    eRpm: v.getUint32(22, true),
-    goodZcCount: v.getUint16(26, true),
-    zcInterval: v.getUint16(28, true),
-    prevZcInterval: v.getUint16(30, true),
-    icAccepted: v.getUint16(32, true),
-    icFalse: v.getUint16(34, true),
-    filterLevel: v.getUint8(36),
-    missedSteps: v.getUint8(37),
-    forcedSteps: v.getUint8(38),
-    ilimActive: v.getUint8(39) !== 0,
-    systemTick: v.getUint32(40, true),
-    uptimeSec: v.getUint32(44, true),
-    zcLatencyPct: hasDiag ? v.getUint8(48) : 0,
-    zcBlankPct: hasDiag ? v.getUint8(49) : 0,
-    zcBypassCount: hasDiag ? v.getUint16(50, true) : 0,
-    zcMode: hasV3 ? v.getUint8(52) : 0,
-    actualForcedComm: hasV3 ? v.getUint8(53) : 0,
-    zcTimeoutCount: hasV3 ? v.getUint16(54, true) : 0,
-    risingZcCount: hasV3 ? v.getUint16(56, true) : 0,
-    fallingZcCount: hasV3 ? v.getUint16(58, true) : 0,
-    risingTimeouts: hasV3 ? v.getUint16(60, true) : 0,
-    fallingTimeouts: hasV3 ? v.getUint16(62, true) : 0,
-
-    /* V4 sector-PI fields. The firmware writes the snapshot in V4
-     * layout when FEATURE_V4_SECTOR_PI is on; we decode them here
-     * regardless of the V3 bit interpretations above so the GUI can
-     * pick which view to render based on the V4 marker bit. */
-    diagLastCapValue: v.getUint16(28, true),
-    diagDelta:        v.getInt16(30, true),     /* SIGNED PI error */
-    diagCaptures:     v.getUint16(32, true),
-    diagPiRuns:       v.getUint16(34, true),
-    v4SpBits:         v.getUint8(37),
-    v4ErpmTp:         v.getUint16(38, true),
-    adcBlankReject:   hasV3 ? v.getUint32(48, true) : 0,
-    adcStateMismatch: hasV3 ? v.getUint32(52, true) : 0,
-    adcCaptureSet:    hasV3 ? v.getUint32(56, true) : 0,
-    adcSetRising:     hasV3 ? v.getUint32(60, true) : 0,
   };
 }
 

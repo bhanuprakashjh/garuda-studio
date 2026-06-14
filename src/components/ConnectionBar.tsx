@@ -2,16 +2,15 @@ import { useRef, useCallback } from 'react';
 import { useEscStore } from '../store/useEscStore';
 import { SerialManager } from '../protocol/serial';
 import { GspParser, buildPacket, CMD, decodeScopeStatus, decodeScopeSamples } from '../protocol/gsp';
-import { decodeInfo, decodeSnapshot, decodeCkSnapshot, decodeParamList, decodeParamValue } from '../protocol/decode';
+import { decodeInfo, decodeSnapshot, decodeParamList, decodeParamValue } from '../protocol/decode';
 import type { ParamDescriptor, ParamListPage } from '../protocol/types';
-import { isCkBoard, BOARD_ID_CK } from '../protocol/types';
 
 const serial = new SerialManager();
 let parser: GspParser;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 export function ConnectionBar() {
-  const { connected, setConnected, setInfo, pushSnapshot, pushCkSnapshot, setParams, setParamValue, setActiveProfile, setTelemActive, addToast, reset, setScopeStatus, appendScopeSamples, clearScopeSamples, setScopeReading } = useEscStore();
+  const { connected, setConnected, setInfo, pushSnapshot, setParams, setParamValue, setActiveProfile, setTelemActive, addToast, reset, setScopeStatus, appendScopeSamples, clearScopeSamples, setScopeReading } = useEscStore();
   const connectingRef = useRef(false);
   const pendingParamPages = useRef<ParamDescriptor[]>([]);
 
@@ -71,25 +70,13 @@ export function ConnectionBar() {
         break;
       }
       case CMD.GET_SNAPSHOT: {
-        const info = useEscStore.getState().info;
-        if (info && isCkBoard(info.boardId)) {
-          try { pushCkSnapshot(decodeCkSnapshot(payload)); } catch { /* ignore malformed */ }
-        } else {
-          pushSnapshot(decodeSnapshot(payload));
-        }
+        try { pushSnapshot(decodeSnapshot(payload)); } catch { /* ignore malformed */ }
         break;
       }
       case CMD.TELEM_FRAME: {
         const snapData = payload.slice(2);  // skip 2-byte seq header
-        const info = useEscStore.getState().info;
-        if (info && isCkBoard(info.boardId)) {
-          if (snapData.length >= 48) {
-            try { pushCkSnapshot(decodeCkSnapshot(snapData)); } catch { /* ignore malformed */ }
-          }
-        } else {
-          if (snapData.length >= 68) {
-            try { pushSnapshot(decodeSnapshot(snapData)); } catch { /* ignore malformed */ }
-          }
+        if (snapData.length >= 68) {
+          try { pushSnapshot(decodeSnapshot(snapData)); } catch { /* ignore malformed */ }
         }
         break;
       }
@@ -181,7 +168,7 @@ export function ConnectionBar() {
     // Forward burst-related packets to the DMA edge timeline component
     const burstHandler = useEscStore.getState().burstPacketHandler;
     if (burstHandler) burstHandler(cmdId, payload);
-  }, [setInfo, pushSnapshot, pushCkSnapshot, setParams, setParamValue, setActiveProfile, addToast, handleParamListPage, refetchAllParams, setScopeStatus, appendScopeSamples, clearScopeSamples, setScopeReading]);
+  }, [setInfo, pushSnapshot, setParams, setParamValue, setActiveProfile, addToast, handleParamListPage, refetchAllParams, setScopeStatus, appendScopeSamples, clearScopeSamples, setScopeReading]);
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;

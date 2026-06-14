@@ -88,255 +88,11 @@ export interface GspSnapshot {
 
 /* ── Board IDs ─────────────────────────────────────────────── */
 export const BOARD_ID_AK = 0x0001;  /* MCLV-48V-300W (dsPIC33AK) */
-export const BOARD_ID_CK = 0x0002;  /* EV43F54A (dsPIC33CK + ATA6847) */
 
 export const BOARD_NAMES: Record<number, string> = {
   [BOARD_ID_AK]: 'MCLV-48V-300W (AK)',
-  [BOARD_ID_CK]: 'EV43F54A (CK)',
 };
 
-export function isCkBoard(boardId: number): boolean {
-  return boardId === BOARD_ID_CK;
-}
-
-/* ── CK Board Snapshot (48 bytes) ────────────────────────────── */
-export interface CkSnapshot {
-  state: number;
-  faultCode: number;
-  currentStep: number;
-  ataStatus: number;
-  potRaw: number;
-  dutyPct: number;
-  zcSynced: boolean;
-  vbusRaw: number;
-  iaRaw: number;
-  ibRaw: number;
-  ibusRaw: number;
-  duty: number;
-  stepPeriod: number;
-  stepPeriodHR: number;
-  eRpm: number;
-  goodZcCount: number;
-  zcInterval: number;
-  prevZcInterval: number;
-  icAccepted: number;
-  icFalse: number;
-  filterLevel: number;
-  missedSteps: number;
-  forcedSteps: number;
-  ilimActive: boolean;
-  systemTick: number;
-  uptimeSec: number;
-  zcLatencyPct: number;
-  zcBlankPct: number;
-  zcBypassCount: number;
-  zcMode: number;
-  actualForcedComm: number;
-  zcTimeoutCount: number;
-  risingZcCount: number;
-  fallingZcCount: number;
-  risingTimeouts: number;
-  fallingTimeouts: number;
-
-  /* ── V4 Sector PI fields ──────────────────────────────────────
-   * Live in the same byte slots as V3 fields above (the firmware
-   * remaps the snapshot layout). Decoded with the proper widths /
-   * sign so the GUI can show them correctly when V4 is detected. */
-  diagDelta: number;          /* int16 — PI loop error (capValue - setValue) */
-  diagLastCapValue: number;   /* uint16 — most recent capValue sample */
-  diagCaptures: number;       /* uint16 — Commutate sectors with valid capture */
-  diagPiRuns: number;         /* uint16 — Commutate sectors that ran PI math */
-  v4SpBits: number;           /* uint8 — bit0=spActive, bit1=spRequest */
-  v4ErpmTp: number;           /* uint16 — eRPM derived from actualStepPeriodHR */
-  /* ADC capture-rate diagnostics (uint32 in firmware, occupy slots 48-63) */
-  adcBlankReject: number;     /* uint32 */
-  adcStateMismatch: number;   /* uint32 */
-  adcCaptureSet: number;      /* uint32 — total successful captures (both polarities) */
-  adcSetRising: number;       /* uint32 — subset on rising sectors; falling = total - rising */
-}
-
-export const CK_ZC_MODES = ['ACQ', 'TRK', 'RCV'] as const;
-
-export const CK_ESC_STATES = ['IDLE', 'ARMED', 'ALIGN', 'OL_RAMP', 'CLOSED_LOOP', 'RECOVERY', 'FAULT'] as const;
-export const CK_FAULT_CODES = ['NONE', 'OVERVOLTAGE', 'UNDERVOLTAGE', 'STALL', 'DESYNC', 'STARTUP_TIMEOUT', 'ATA6847'] as const;
-
-export const CK_PROFILE_NAMES = ['Hurst Long', 'A2212 1400KV', '2810 1350KV', 'Custom'] as const;
-export const CK_PROFILE_COUNT = 3;
-
-/* ── CK Board Parameter Groups ──────────────────────────────── */
-export const CK_PARAM_GROUPS: Record<number, { name: string; color: string }> = {
-  // V3 (legacy CK params 0xC0-0xE5)
-  0: { name: 'Motor Identity', color: '#3b82f6' },
-  1: { name: 'Startup & Ramp', color: '#f59e0b' },
-  2: { name: 'Closed-Loop', color: '#10b981' },
-  3: { name: 'ATA6847 Protection', color: '#ef4444' },
-  4: { name: 'ATA6847 GDU', color: '#8b5cf6' },
-  5: { name: 'ZC Detection', color: '#06b6d4' },
-  6: { name: 'Voltage Protection', color: '#f97316' },
-  7: { name: 'Recovery', color: '#64748b' },
-  // V4 sector-PI runtime tunables (params 0xF0-0xFF)
-  8: { name: 'V4 PI Loop', color: '#ec4899' },     // pink — change-while-running
-  9: { name: 'V4 Capture',  color: '#14b8a6' },    // teal
-  10:{ name: 'V4 Limits',   color: '#f59e0b' },    // amber
-};
-
-export const CK_PARAM_NAMES: Record<number, { display: string; variable: string }> = {
-  // Group 0: Motor Identity
-  0xC0: { display: 'Pole Pairs', variable: 'polePairs' },
-  0xC1: { display: 'Motor KV', variable: 'motorKv' },
-  0xC2: { display: 'Phase Resistance', variable: 'motorRsMilliOhm' },
-  0xC3: { display: 'Phase Inductance', variable: 'motorLsMicroH' },
-  // Group 1: Startup & Ramp
-  0xC4: { display: 'Align Time', variable: 'alignTimeMs' },
-  0xC5: { display: 'Align Duty', variable: 'alignDutyPctX10' },
-  0xC6: { display: 'Initial Step Period', variable: 'initialStepPeriod' },
-  0xC7: { display: 'Min Step Period', variable: 'minStepPeriod' },
-  0xC8: { display: 'Ramp Acceleration', variable: 'rampAccelErpmS' },
-  0xC9: { display: 'Ramp Duty Cap', variable: 'rampDutyPctX10' },
-  0xCA: { display: 'Ramp Target eRPM', variable: 'rampTargetErpm' },
-  // Group 2: Closed-Loop
-  0xCB: { display: 'CL Idle Duty', variable: 'clIdleDutyPct' },
-  0xCC: { display: 'Timing Adv Min', variable: 'timingAdvMinDeg' },
-  0xCD: { display: 'Timing Adv Max', variable: 'timingAdvMaxDeg' },
-  0xCE: { display: 'Timing Adv Start', variable: 'timingAdvStartErpm' },
-  0xCF: { display: 'Max CL eRPM', variable: 'maxClosedLoopErpm' },
-  0xD0: { display: 'Duty Slew Up', variable: 'dutySlewUp' },
-  0xD1: { display: 'Duty Slew Down', variable: 'dutySlewDown' },
-  // Group 3: ATA6847 Protection
-  0xD2: { display: 'ILIM Enable', variable: 'ilimEnable' },
-  0xD3: { display: 'ILIM Shutdown', variable: 'ilimShutdownEnable' },
-  0xD4: { display: 'ILIM DAC', variable: 'ilimDac' },
-  0xD5: { display: 'ILIM Filter Time', variable: 'ilimFilterTime' },
-  0xD6: { display: 'SC Enable', variable: 'scEnable' },
-  0xD7: { display: 'SC Threshold', variable: 'scThreshold' },
-  0xD8: { display: 'SC Filter Time', variable: 'scFilterTime' },
-  // Group 4: ATA6847 GDU
-  0xD9: { display: 'BEMF Enable', variable: 'bemfEnable' },
-  0xDA: { display: 'Cross-Cond Time', variable: 'crossConductionTime' },
-  0xDB: { display: 'Edge Blanking', variable: 'edgeBlankingTime' },
-  0xDC: { display: 'CSA Gain', variable: 'csaGain' },
-  // Group 5: ZC Detection
-  0xDD: { display: 'ZC Deglitch Min', variable: 'zcDeglitchMin' },
-  0xDE: { display: 'ZC Deglitch Max', variable: 'zcDeglitchMax' },
-  0xDF: { display: 'ZC Timeout Mult', variable: 'zcTimeoutMult' },
-  0xE0: { display: 'ZC Desync Thresh', variable: 'zcDesyncThresh' },
-  0xE1: { display: 'ZC Miss Limit', variable: 'zcMissLimit' },
-  // Group 6: Voltage Protection
-  0xE2: { display: 'Vbus OV Threshold', variable: 'vbusOvThreshold' },
-  0xE3: { display: 'Vbus UV Threshold', variable: 'vbusUvThreshold' },
-  // Group 7: Recovery
-  0xE4: { display: 'Max Restart Attempts', variable: 'desyncRestartMax' },
-  0xE5: { display: 'Recovery Time', variable: 'recoveryTimeMs' },
-  // V4 Group 8: PI Loop tuning (HOT — change while running)
-  0xF0: { display: 'Phase Advance', variable: 'phaseAdvanceDegX10' },
-  0xF1: { display: 'PI Kp Shift',   variable: 'piKpShift' },
-  0xF2: { display: 'PI Ki Shift',   variable: 'piKiShift' },
-  // V4 Group 9: Capture / blanking
-  0xF3: { display: 'Blanking %',    variable: 'blankingPct' },
-  0xF5: { display: 'PI Feed Polarity', variable: 'piFeedPolarity' },
-  // V4 Group 10: Limits
-  0xF4: { display: 'Min Period',    variable: 'minPeriodHr' },
-};
-
-export const CK_PARAM_UNITS: Record<number, string> = {
-  0xC0: 'pairs', 0xC1: 'RPM/V', 0xC2: 'm\u03A9', 0xC3: '\u00B5H',
-  0xC4: 'ms', 0xC5: '\u00D70.1%', 0xC6: 'ticks', 0xC7: 'ticks',
-  0xC8: 'eRPM/s', 0xC9: '\u00D70.1%', 0xCA: 'eRPM',
-  0xCB: '%', 0xCC: '\u00B0', 0xCD: '\u00B0', 0xCE: 'eRPM',
-  0xCF: 'eRPM', 0xD0: 'cnt/tick', 0xD1: 'cnt/tick',
-  0xD2: '', 0xD3: '', 0xD4: '0-127', 0xD5: '0-7',
-  0xD6: '', 0xD7: '0-7', 0xD8: '0-7',
-  0xD9: '', 0xDA: '0-7', 0xDB: '0-3', 0xDC: '8/16/32/64\u00D7',
-  0xDD: 'reads', 0xDE: 'reads', 0xDF: '\u00D7', 0xE0: 'steps', 0xE1: 'steps',
-  0xE2: 'ADC', 0xE3: 'ADC',
-  0xE4: 'count', 0xE5: 'ms',
-  // V4 params
-  0xF0: '\u00D70.1\u00B0',  // ×0.1° (e.g. 100 = 10.0°)
-  0xF1: 'shift', 0xF2: 'shift',
-  0xF3: '%',
-  0xF5: '0=both/1=rise/2=fall',
-  0xF4: 'HR ticks',
-};
-
-/** Optional display scaling for params whose raw integer value is a fixed-
- * point representation. Returned object describes how to render & edit:
- *   scale: divide raw by this for display (e.g., scale=10 → 100 raw shows as 10.0)
- *   decimals: digits after decimal point in display
- *   suffix: short unit shown right of the number (overrides CK_PARAM_UNITS for these)
- *   options: for enum-style params, raw value → human label
- * If a param ID isn't in this table the GUI falls back to showing the raw int. */
-export interface ParamFormat {
-  scale?: number;
-  decimals?: number;
-  suffix?: string;
-  options?: Record<number, string>;
-}
-
-export const CK_PARAM_FORMAT: Record<number, ParamFormat> = {
-  // V3 raw-x10 % (existing convention)
-  0xC5: { scale: 10, decimals: 1, suffix: '%' },    // alignDutyPctX10
-  0xC9: { scale: 10, decimals: 1, suffix: '%' },    // rampDutyPctX10
-  // V4 phase advance ×0.1°
-  0xF0: { scale: 10, decimals: 1, suffix: '\u00B0' },
-  // V4 PI feed polarity — enum
-  0xF5: { options: { 0: 'Both', 1: 'Rising only', 2: 'Falling only' } },
-};
-
-export const CK_PARAM_TOOLTIPS: Record<number, string> = {
-  0xC0: 'Number of magnetic pole pairs.',
-  0xC1: 'Motor velocity constant (RPM per volt).',
-  0xC2: 'Phase resistance in milliohms.',
-  0xC3: 'Phase inductance in microhenries.',
-  0xC4: 'Rotor alignment dwell time.',
-  0xC5: 'Alignment duty in 0.1% units (25 = 2.5%). Higher = more alignment current.',
-  0xC6: 'Initial forced commutation period (Timer1 ticks). Lower = faster initial speed.',
-  0xC7: 'Minimum step period for OL ramp termination. Determines OL\u2192CL handoff speed.',
-  0xC8: 'Open-loop ramp acceleration in eRPM/s.',
-  0xC9: 'Maximum duty during OL ramp in 0.1% units (170 = 17%). Limits startup current.',
-  0xCA: 'Target eRPM for OL\u2192CL handoff (informational).',
-  0xCB: 'Minimum duty when motor is running at zero throttle.',
-  0xCC: 'Timing advance at low speed (degrees).',
-  0xCD: 'Timing advance at max speed (degrees).',
-  0xCE: 'eRPM where timing advance ramp begins.',
-  0xCF: 'Timing advance curve endpoint. Also affects step period floor.',
-  0xD0: 'Duty increase rate (PWM counts per Timer1 tick). Higher = faster throttle response.',
-  0xD1: 'Duty decrease rate (PWM counts per Timer1 tick). Lower = gentler deceleration.',
-  0xD2: 'Enable ATA6847 hardware current limit (cycle-by-cycle chopping).',
-  0xD3: 'ILIM shutdown mode: 0=chop (motor keeps running), 1=shutdown (motor stops).',
-  0xD4: 'ILIM DAC threshold (0-127). Trip current = (3.3\u00D7DAC/128 - 1.65) / (Gain\u00D7Rshunt).',
-  0xD5: 'ILIM filter time (0-7). Higher = more noise rejection, slower response.',
-  0xD6: 'Enable VDS short-circuit protection.',
-  0xD7: 'SC voltage threshold (0-7). 7=2000mV max. Lower = more sensitive.',
-  0xD8: 'SC filter time (0-7). Higher = more noise rejection.',
-  0xD9: 'Enable BEMF comparators for ZC detection.',
-  0xDA: 'Cross-conduction prevention time (0-7). Prevents shoot-through.',
-  0xDB: 'Edge blanking time (0-3). Blanks gate driver after switching.',
-  0xDC: 'Current sense amplifier gain: 0=8\u00D7, 1=16\u00D7, 2=32\u00D7, 3=64\u00D7.',
-  0xDD: 'Minimum deglitch filter at high speed. Consecutive reads to confirm ZC.',
-  0xDE: 'Maximum deglitch filter at low speed.',
-  0xDF: 'Forced commutation timeout multiplier (e.g., 2 = timeout at 2\u00D7 step period).',
-  0xE0: 'Consecutive missed ZCs to clear sync lock.',
-  0xE1: 'Consecutive missed ZCs to declare desync fault.',
-  0xE2: 'Overvoltage fault threshold (raw ADC, 16-bit scaled). ~1211 counts/V.',
-  0xE3: 'Undervoltage fault threshold (raw ADC, 16-bit scaled). ~1211 counts/V.',
-  0xE4: 'Maximum restart attempts after desync before permanent fault.',
-  0xE5: 'Recovery dwell time between desync and restart.',
-  // V4 sector-PI tunables (HOT — change while running)
-  0xF0: 'Phase advance angle in 0.1\u00B0 units (100 = 10.0\u00B0). Affects setValue formula and so torque/current trade-off and peak RPM. Default 100.',
-  0xF1: 'PI proportional gain shift: Kp = 1/2^N. Lower N = larger Kp = faster response. Default 2 (Kp=1/4).',
-  0xF2: 'PI integral gain shift: Ki = 1/2^N. Lower N = larger Ki = faster equilibrium. Default 4 (Ki=1/16).',
-  0xF3: 'Sector blanking as % of sector period. Demag noise lives in the first ~30-35%. Default 40.',
-  0xF5: 'Which polarity feeds the PI loop. 0=both (mixed — only stable when one polarity dominates by accident). 1=rising-only (proven 196k baseline, default). 2=falling-only (worked with prop in run-1). Captures of the non-fed polarity still count for R/F% diagnostic. Try 1 or 2 for stability, 0 once polarity-offset compensation is implemented.',
-  0xF4: 'PI timerPeriod floor in HR ticks (640ns each). Speed ceiling guard. Lower = higher max RPM. Default 10.',
-};
-
-/* Current scaling: raw signed ADC (fractional 12-bit) to milliamps.
- * Phase (OA2/OA3 Gt=16, 3mΩ): mA = raw × 1.049
- * IBus: reconstructed per step, same scaling */
-export const CK_CURRENT_SCALE = 1.049;
-
-/* Vbus scaling: raw ADC to volts. EV43F54A divider ~1211 raw/V */
-export const CK_VBUS_SCALE = 1211;
 
 export interface ParamDescriptor {
   id: number;
@@ -403,6 +159,10 @@ export const PARAM_NAMES: Record<number, string> = {
   // Recovery (group 6)
   0x6A: 'Desync Coast Time [desyncCoastMs]',
   0x6B: 'Max Restart Attempts [desyncMaxRestarts]',
+  0x6C: 'Morph Lock ZC Count [morphLockZcCount]',
+  0x6D: 'Morph Lock Tolerance [morphLockTolPct]',
+  0x6E: 'I-f Startup Current [ifCurrentCa]',
+  0x6F: 'I-f Ramp Rate [ifRampErpmPerS]',
   // Motor Hardware (group 7)
   0x50: 'Motor Pole Pairs [motorPolePairs]',
   // FOC Motor Model (group 8)
@@ -442,6 +202,7 @@ export const PARAM_UNITS: Record<number, string> = {
   0x60: '%/ms', 0x61: '%/ms', 0x62: 'ms', 0x63: '\u00f7',
   0x68: 'ADC', 0x69: 'ADC',
   0x6A: 'ms', 0x6B: 'count',
+  0x6C: 'count', 0x6D: '%', 0x6E: 'cA', 0x6F: 'eRPM/s',
   0x50: 'pairs',
   // FOC Motor Model
   0x70: 'm\u03A9', 0x71: '\u00B5H', 0x72: '\u00B5V\u00B7s/rad',
@@ -489,6 +250,10 @@ export const PARAM_TOOLTIPS: Record<number, string> = {
   0x69: 'Bus voltage ADC reading below which an undervoltage fault triggers.',
   0x6A: 'Coast-down time after desync before attempting restart.',
   0x6B: 'Maximum restart attempts after desync before permanent fault. 0 = no restarts.',
+  0x6C: 'Consecutive in-tolerance ZC intervals required to lock and exit MORPH into closed loop.',
+  0x6D: 'Allowed ZC-interval variation (%) for a sample to count toward the morph lock.',
+  0x6E: 'I-f startup commanded current in centi-amps (e.g. 800 = 8.00 A).',
+  0x6F: 'I-f startup forced-commutation ramp rate (eRPM per second).',
   0x50: 'Number of magnetic pole pairs. Informational: used for eRPM to mechanical RPM conversion in GUI.',
   // FOC Motor Model
   0x70: 'Phase resistance in milliohms. Critical for FOC current control — wrong Rs causes observer drift and PI mismatch.',

@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useEscStore } from '../store/useEscStore';
-import { isFocEnabled, isCkBoard, CK_CURRENT_SCALE, CK_VBUS_SCALE } from '../protocol/types';
+import { isFocEnabled } from '../protocol/types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import type { GspSnapshot, CkSnapshot } from '../protocol/types';
+import type { GspSnapshot } from '../protocol/types';
 
 interface ScopeChannel {
   key: string;
@@ -14,60 +14,6 @@ interface ScopeChannel {
   focOnly?: boolean;
   sixStepOnly?: boolean;
 }
-
-/* CK board channels — separate type, same visual interface */
-interface CkScopeChannel {
-  key: string;
-  label: string;
-  unit: string;
-  color: string;
-  extract: (s: CkSnapshot, info: { polePairs: number }) => number;
-  group: string;
-}
-
-const CK_CHANNELS: CkScopeChannel[] = [
-  { key: 'ckErpm', label: 'eRPM', unit: 'eRPM', color: '#3b82f6', group: 'Speed',
-    extract: (s) => s.eRpm },
-  { key: 'ckMechRpm', label: 'Mech RPM', unit: 'RPM', color: '#60a5fa', group: 'Speed',
-    extract: (s, i) => i.polePairs > 0 ? Math.round(s.eRpm / i.polePairs) : s.eRpm },
-  { key: 'ckDuty', label: 'Duty', unit: '%', color: '#f472b6', group: 'Speed',
-    extract: (s) => s.dutyPct },
-  { key: 'ckStepPeriod', label: 'Step Period', unit: 'ticks', color: '#64748b', group: 'Speed',
-    extract: (s) => s.stepPeriod },
-
-  { key: 'ckVbus', label: 'Vbus', unit: 'V', color: '#22c55e', group: 'Power',
-    extract: (s) => +(s.vbusRaw / CK_VBUS_SCALE).toFixed(2) },
-  { key: 'ckIa', label: 'Phase A (Ia)', unit: 'mA', color: '#60a5fa', group: 'Power',
-    extract: (s) => Math.round(s.iaRaw * CK_CURRENT_SCALE) },
-  { key: 'ckIb', label: 'Phase B (Ib)', unit: 'mA', color: '#34d399', group: 'Power',
-    extract: (s) => Math.round(s.ibRaw * CK_CURRENT_SCALE) },
-  { key: 'ckIbus', label: 'Bus Current', unit: 'mA', color: '#f97316', group: 'Power',
-    extract: (s) => Math.round(s.ibusRaw * CK_CURRENT_SCALE) },
-
-  { key: 'ckGoodZc', label: 'Good ZC', unit: '', color: '#22d3ee', group: 'ZC',
-    extract: (s) => s.goodZcCount },
-  { key: 'ckZcInterval', label: 'ZC Interval', unit: '', color: '#2dd4bf', group: 'ZC',
-    extract: (s) => s.zcInterval },
-  { key: 'ckFilterLevel', label: 'Filter Level', unit: '', color: '#a78bfa', group: 'ZC',
-    extract: (s) => s.filterLevel },
-  { key: 'ckMissed', label: 'Missed Steps', unit: '', color: '#ef4444', group: 'ZC',
-    extract: (s) => s.missedSteps },
-  { key: 'ckForced', label: 'Forced Steps', unit: '', color: '#f43f5e', group: 'ZC',
-    extract: (s) => s.forcedSteps },
-  { key: 'ckIcAccepted', label: 'IC Accepted', unit: '', color: '#06b6d4', group: 'ZC',
-    extract: (s) => s.icAccepted },
-  { key: 'ckIcFalse', label: 'IC False', unit: '', color: '#dc2626', group: 'ZC',
-    extract: (s) => s.icFalse },
-  { key: 'ckPot', label: 'Pot', unit: '', color: '#c084fc', group: 'Input',
-    extract: (s) => s.potRaw },
-];
-
-const CK_PRESETS: Record<string, { label: string; channels: string[] }> = {
-  ckOverview: { label: 'Overview', channels: ['ckErpm', 'ckDuty', 'ckVbus', 'ckIbus'] },
-  ckCurrents: { label: 'Currents', channels: ['ckIa', 'ckIb', 'ckIbus', 'ckDuty'] },
-  ckZc: { label: 'ZC Debug', channels: ['ckGoodZc', 'ckMissed', 'ckForced', 'ckFilterLevel'] },
-  ckSpeed: { label: 'Speed', channels: ['ckErpm', 'ckStepPeriod', 'ckDuty'] },
-};
 
 const CHANNELS: ScopeChannel[] = [
   // FOC currents
@@ -215,29 +161,19 @@ const PRESETS: Record<string, { label: string; channels: string[]; focOnly?: boo
 };
 
 export function ScopePanel() {
-  const akHistory = useEscStore(s => s.history);
-  const ckHistory = useEscStore(s => s.ckHistory);
+  const history = useEscStore(s => s.history);
   const info = useEscStore(s => s.info);
   const telemActive = useEscStore(s => s.telemActive);
   const focMode = info ? isFocEnabled(info.featureFlags) : false;
-  const ckMode = info ? isCkBoard(info.boardId) : false;
 
   const [activeChannels, setActiveChannels] = useState<Set<string>>(
     new Set(['eRPM', 'duty', 'bemf', 'zcThreshold'])
   );
   const [expanded, setExpanded] = useState(true);
   const prevFocMode = useRef(focMode);
-  const prevCkMode = useRef(ckMode);
 
-  // Auto-switch default channels when mode/board changes
+  // Auto-switch default channels when FOC mode changes
   useEffect(() => {
-    if (ckMode !== prevCkMode.current) {
-      prevCkMode.current = ckMode;
-      if (ckMode) {
-        setActiveChannels(new Set(['ckErpm', 'ckDuty', 'ckVbus', 'ckIbus']));
-        return;
-      }
-    }
     if (focMode !== prevFocMode.current) {
       prevFocMode.current = focMode;
       setActiveChannels(focMode
@@ -245,28 +181,21 @@ export function ScopePanel() {
         : new Set(['eRPM', 'duty', 'bemf', 'zcThreshold'])
       );
     }
-  }, [focMode, ckMode]);
+  }, [focMode]);
 
   const polePairs = info?.motorPolePairs ?? 1;
 
-  // CK board: use CK channels and history
-  const visibleChannels = ckMode
-    ? (CK_CHANNELS as unknown as ScopeChannel[])
-    : CHANNELS.filter(ch => {
-        if (focMode && ch.sixStepOnly) return false;
-        if (!focMode && ch.focOnly) return false;
-        return true;
-      });
+  const visibleChannels = CHANNELS.filter(ch => {
+    if (focMode && ch.sixStepOnly) return false;
+    if (!focMode && ch.focOnly) return false;
+    return true;
+  });
 
-  const visiblePresets = ckMode
-    ? Object.entries(CK_PRESETS)
-    : Object.entries(PRESETS).filter(([, p]) => {
-        if (focMode && p.sixStepOnly) return false;
-        if (!focMode && p.focOnly) return false;
-        return true;
-      });
-
-  const history = ckMode ? ckHistory : akHistory;
+  const visiblePresets = Object.entries(PRESETS).filter(([, p]) => {
+    if (focMode && p.sixStepOnly) return false;
+    if (!focMode && p.focOnly) return false;
+    return true;
+  });
 
   const toggle = (key: string) => {
     setActiveChannels(prev => {
@@ -301,14 +230,10 @@ export function ScopePanel() {
   const activeList = activeChList;
 
   // Axis assignment
-  const leftKeys = ckMode
-    ? ['ckErpm', 'ckMechRpm', 'ckVbus', 'ckStepPeriod', 'ckIa', 'ckIb', 'ckIbus']
-    : focMode
-      ? ['focOmega', 'focRpm', 'focVbus', 'focPower', 'focTheta', 'focThetaObs']
-      : ['eRPM', 'mechRPM', 'stepPeriod', 'hwzcStepPeriod', 'bemf', 'zcThreshold'];
-  const rightKeys = ckMode
-    ? ['ckDuty', 'ckPot', 'ckFilterLevel']
-    : ['duty', 'throttle', 'morphAlpha'];
+  const leftKeys = focMode
+    ? ['focOmega', 'focRpm', 'focVbus', 'focPower', 'focTheta', 'focThetaObs']
+    : ['eRPM', 'mechRPM', 'stepPeriod', 'hwzcStepPeriod', 'bemf', 'zcThreshold'];
+  const rightKeys = ['duty', 'throttle', 'morphAlpha'];
 
   const leftChannels = activeList.filter(c => leftKeys.includes(c.key));
   const rightChannels = activeList.filter(c => rightKeys.includes(c.key));
