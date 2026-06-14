@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GspInfo, GspSnapshot, GspRxStatus, ParamDescriptor, ScopeSample, ScopeStatus } from '../protocol/types';
 
-export type TabId = 'dashboard' | 'scope' | 'params' | 'help';
+export type TabId = 'dashboard' | 'scope' | 'sim' | 'params' | 'help';
 
 interface ParamValue {
   descriptor: ParamDescriptor;

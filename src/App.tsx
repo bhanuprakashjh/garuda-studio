@@ -9,6 +9,7 @@ import { ThrottleSlider } from './components/ThrottleSlider';
 import { ProfileSelector } from './components/ProfileSelector';
 import { ParamPanel } from './components/ParamPanel';
 import { ParamModal } from './components/ParamModal';
+import { FallingZcSimPanel } from './components/FallingZcSimPanel';
 import { HelpPanel, MicrochipIcon } from './components/HelpPanel';
 import { useEscStore, type TabId } from './store/useEscStore';
 import { BOARD_NAMES } from './protocol/types';
@@ -40,6 +41,7 @@ const toastColors = {
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
   { id: 'scope', label: 'Scope', icon: 'M2 12h4l3-9 4 18 3-9h4' },
+  { id: 'sim', label: 'ZC Sim', icon: 'M3 3v18h18M7 14l3-4 3 3 4-6' },
   { id: 'params', label: 'Parameters', icon: 'M12 3v18M3 12h18M7.5 7.5l9 9M16.5 7.5l-9 9' },
   { id: 'help', label: 'Help', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm0 14v-2m0-4a2 2 0 114 0c0 1.5-2 2-2 3' },
 ];
@@ -127,6 +129,10 @@ function ScopeTab() {
   );
 }
 
+function SimTab() {
+  return <FallingZcSimPanel />;
+}
+
 function ParamsTab() {
   return <ParamPanel />;
 }
@@ -146,6 +152,7 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard': return <DashboardTab />;
       case 'scope': return <ScopeTab />;
+      case 'sim': return <SimTab />;
       case 'params': return <ParamsTab />;
       case 'help': return <HelpTab />;
       default: return <DashboardTab />;

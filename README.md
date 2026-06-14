@@ -23,6 +23,9 @@ directly.
 - **Scope** — live time chart + the on-MCU burst scope.
 - **Parameters** — read/edit/save the full GSP parameter set live.
 - **Throttle / control** — arm, throttle, profile select.
+- **ZC Sim** — analytic model (no hardware) of why the falling sector loses true
+  zero-cross above ~70k: true vs measured ZC position and the timer-extrapolation
+  error across eRPM. TypeScript port of `tools/garuda_debug/garuda_gui/zcsim*.py`.
 
 AKESC 6-step only (the CK/ATA6847 board path was removed for this build).
 
