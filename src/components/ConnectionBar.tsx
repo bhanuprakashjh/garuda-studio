@@ -8,6 +8,7 @@ import type { ParamDescriptor, ParamListPage } from '../protocol/types';
 const serial = new SerialManager();
 let parser: GspParser;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 export function ConnectionBar() {
   const { connected, setConnected, setInfo, pushSnapshot, setParams, setParamValue, setActiveProfile, setTelemActive, addToast, reset, setScopeStatus, appendScopeSamples, clearScopeSamples, setScopeReading } = useEscStore();
@@ -196,34 +197,44 @@ export function ConnectionBar() {
       await serial.write(buildPacket(CMD.GET_SNAPSHOT));
       await new Promise(r => setTimeout(r, 50));
       await serial.write(buildPacket(CMD.GET_PARAM_LIST));
+
+      // Auto-start live data by POLLING GET_SNAPSHOT — this mirrors the proven
+      // desktop broker (broker.py _poll), which is more reliable than relying on
+      // TELEM_START unsolicited streaming. Also keep the heartbeat dead-man's switch.
+      setTelemActive(true);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => { serial.write(buildPacket(CMD.HEARTBEAT)).catch(() => {}); }, 200);
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => { serial.write(buildPacket(CMD.GET_SNAPSHOT)).catch(() => {}); }, 33);
     } catch (e: any) {
       console.error('Connect failed:', e);
       alert('Connect failed: ' + (e?.message || e));
     } finally {
       connectingRef.current = false;
     }
-  }, [handlePacket, setConnected]);
+  }, [handlePacket, setConnected, setTelemActive]);
 
   const disconnect = useCallback(async () => {
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     setTelemActive(false);
     await serial.disconnect();
     reset();
   }, [reset, setTelemActive]);
 
   const startTelem = useCallback(async () => {
-    await serial.write(buildPacket(CMD.TELEM_START, new Uint8Array([50])));
     setTelemActive(true);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
-    heartbeatTimer = setInterval(async () => {
-      try { await serial.write(buildPacket(CMD.HEARTBEAT)); } catch {}
-    }, 200);
+    heartbeatTimer = setInterval(() => { serial.write(buildPacket(CMD.HEARTBEAT)).catch(() => {}); }, 200);
+    if (pollTimer) clearInterval(pollTimer);
+    // Poll GET_SNAPSHOT (~30 Hz) like the broker — proven path
+    pollTimer = setInterval(() => { serial.write(buildPacket(CMD.GET_SNAPSHOT)).catch(() => {}); }, 33);
   }, [setTelemActive]);
 
   const stopTelem = useCallback(async () => {
-    await serial.write(buildPacket(CMD.TELEM_STOP));
     setTelemActive(false);
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }, [setTelemActive]);
 
   const telemActive = useEscStore(s => s.telemActive);
