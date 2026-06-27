@@ -1,5 +1,5 @@
 import { useEscStore } from '../store/useEscStore';
-import { ESC_STATES, FAULT_CODES, PROFILE_NAMES, FOC_SUB_STATES, isFocEnabled } from '../protocol/types';
+import { ESC_STATES, FAULT_CODES, PROFILE_NAMES, PROFILE_DISPLAY_NAMES, FOC_SUB_STATES, isFocEnabled } from '../protocol/types';
 
 const STATE_COLORS: Record<string, string> = {
   IDLE: 'var(--text-muted)',
@@ -108,7 +108,7 @@ export function StatusPanel() {
       <div style={{ ...row, borderBottom: 'none' }}>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Profile</span>
         <span style={{ fontSize: 12, color: 'var(--accent-blue)', fontWeight: 500 }}>
-          {connected ? (PROFILE_NAMES[activeProfile] ?? `#${activeProfile}`) : '\u2014'}
+          {connected ? (PROFILE_DISPLAY_NAMES[activeProfile] ?? PROFILE_NAMES[activeProfile] ?? `#${activeProfile}`) : '\u2014'}
         </span>
       </div>
 

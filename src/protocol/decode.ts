@@ -27,23 +27,54 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
    * formats decode from one buffer; the consumer picks by mode. Bus/phase
    * current scale: 3mΩ shunt × 24.95 gain ≈ 93 counts/A, 2048 = rest bias. */
   const n = data.byteLength;
+
+  /* dspic33AKESC-Simplified ships EXACTLY 68B and computes REAL units on-chip,
+   * placed in a tail that OVERLAPS the production morph/tick fields (eRPM u32 @50,
+   * Vbus mV @54, currents centi-amps signed @56..64). So trust that tail ONLY when
+   * the snapshot is exactly 68B (production sends 106B+). See dspic33AKESC-
+   * Simplified/src/gsp.c sendSnapshot() for the byte map. */
+  const isSimplified = n === 68;
+
   const IBUS_A = 3.3 / (4095 * 24.95 * 0.003);    // ≈ 0.01077 A / ADC count
   const adcToA = (raw: number) => (raw - 2048) * IBUS_A;
-  const ibusInstA = adcToA(v.getUint16(10, true));        // valley inst (unreliable)
-  const ibusAvgA = n >= 248 ? adcToA(v.getUint16(246, true)) : ibusInstA;
-  let ibusWinA = ibusInstA;
-  if (n >= 208) {
-    const pos = adcToA(v.getUint16(198, true));           // window max
-    const neg = adcToA(v.getUint16(200, true));           // window min
-    ibusWinA = Math.abs(neg) > Math.abs(pos) ? neg : pos; // signed dominant
+
+  let ibusInstA: number, ibusAvgA: number, ibusWinA: number;
+  let iaPkMagA = 0, ibPkMagA = 0;
+  let erpmReal = 0, vbusV = 0;
+  let hwzcEnabled = v.getUint8(30) !== 0;
+  let hwzcStepPeriodHR = v.getUint32(40, true);
+
+  if (isSimplified) {
+    erpmReal = v.getUint32(50, true);
+    vbusV = v.getUint16(54, true) / 1000;                 // firmware mV (divider 23.2)
+    const iaCa = v.getInt16(56, true), ibCa = v.getInt16(58, true);
+    const ibusCa = v.getInt16(62, true), ibusAvgCa = v.getInt16(64, true);
+    ibusInstA = ibusCa / 100;
+    ibusAvgA = ibusAvgCa / 100;                            // smoothed EMA (trustworthy)
+    ibusWinA = ibusAvgA;
+    iaPkMagA = Math.abs(iaCa) / 100;
+    ibPkMagA = Math.abs(ibCa) / 100;
+    // The simplified omits hwzcStepPeriodHR, but it is EXACTLY 1e9/eRPM (firmware
+    // HR_ERPM_CONST = 1e9) so synthesise it -> every `1e9 / hwzcStepPeriodHR` eRPM
+    // consumer (App, LiveTunePanel) reads the real speed with no further change.
+    hwzcEnabled = true;
+    hwzcStepPeriodHR = erpmReal > 0 ? Math.round(1e9 / erpmReal) : 0;
+  } else {
+    ibusInstA = adcToA(v.getUint16(10, true));            // valley inst (unreliable)
+    ibusAvgA = n >= 248 ? adcToA(v.getUint16(246, true)) : ibusInstA;
+    ibusWinA = ibusInstA;
+    if (n >= 208) {
+      const pos = adcToA(v.getUint16(198, true));         // window max
+      const neg = adcToA(v.getUint16(200, true));         // window min
+      ibusWinA = Math.abs(neg) > Math.abs(pos) ? neg : pos; // signed dominant
+    }
+    if (n >= 198) {
+      // 174:ia 176:ib 178:iaMax 180:iaMin 182:ibMax 184:ibMin
+      iaPkMagA = Math.max(Math.abs(adcToA(v.getUint16(178, true))), Math.abs(adcToA(v.getUint16(180, true))));
+      ibPkMagA = Math.max(Math.abs(adcToA(v.getUint16(182, true))), Math.abs(adcToA(v.getUint16(184, true))));
+    }
   }
   const hwzcReject = n >= 174 ? v.getUint32(170, true) : 0;
-  let iaPkMagA = 0, ibPkMagA = 0;
-  if (n >= 198) {
-    // 174:ia 176:ib 178:iaMax 180:iaMin 182:ibMax 184:ibMin
-    iaPkMagA = Math.max(Math.abs(adcToA(v.getUint16(178, true))), Math.abs(adcToA(v.getUint16(180, true))));
-    ibPkMagA = Math.max(Math.abs(adcToA(v.getUint16(182, true))), Math.abs(adcToA(v.getUint16(184, true))));
-  }
   const cpuLoadPct = n >= 242 ? v.getUint16(228, true) / 10 : 0;
   const missBySector = n >= 242
     ? [0, 1, 2, 3, 4, 5].map(i => v.getUint16(230 + i * 2, true))
@@ -68,11 +99,11 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
     zcSynced: v.getUint8(24) !== 0,
     zcConfirmedCount: v.getUint16(26, true),
     zcTimeoutForceCount: v.getUint16(28, true),
-    hwzcEnabled: v.getUint8(30) !== 0,
+    hwzcEnabled,
     hwzcPhase: v.getUint8(31),
     hwzcTotalZcCount: v.getUint32(32, true),
     hwzcTotalMissCount: v.getUint32(36, true),
-    hwzcStepPeriodHR: v.getUint32(40, true),
+    hwzcStepPeriodHR,
     hwzcDbgLatchDisable: v.getUint8(44) !== 0,
     morphSubPhase: v.getUint8(46),
     morphStep: v.getUint8(47),
@@ -112,6 +143,8 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
     // 6-step AKESC v3 tail
     ibusInstA, ibusAvgA, ibusWinA, hwzcReject, iaPkMagA, ibPkMagA,
     cpuLoadPct, missBySector, snapBytes: n,
+    // dspic33AKESC-Simplified real units (0 / false for other firmware)
+    erpmReal, vbusV, simplified: isSimplified,
   };
 }
 

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useEscStore } from '../store/useEscStore';
 import { serial } from './ConnectionBar';
 import { buildPacket, CMD } from '../protocol/gsp';
-import { PARAM_NAMES, PARAM_UNITS, PARAM_TOOLTIPS, PARAM_GROUPS, PROFILE_NAMES } from '../protocol/types';
+import { PARAM_NAMES, PARAM_UNITS, PARAM_TOOLTIPS, PARAM_GROUPS, PROFILE_NAMES, PROFILE_DISPLAY_NAMES } from '../protocol/types';
 
 const GROUP_COLORS: Record<number, string> = {
   0: '#f97316', 1: '#3b82f6', 2: '#ef4444', 3: '#a78bfa',
@@ -94,7 +94,7 @@ export function ParamModal() {
     return { display: full, varName: '' };
   };
 
-  const profileName = PROFILE_NAMES[activeProfile] ?? `Profile ${activeProfile}`;
+  const profileName = PROFILE_DISPLAY_NAMES[activeProfile] ?? PROFILE_NAMES[activeProfile] ?? `Profile ${activeProfile}`;
   const hasUnsaved = pendingSaves.size > 0;
 
   // Live Vbus (V) + OC soft limit (A) for the est-current annotation.

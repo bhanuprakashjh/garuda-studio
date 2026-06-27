@@ -84,6 +84,13 @@ export interface GspSnapshot {
   cpuLoadPct: number;
   missBySector: number[];
   snapBytes: number;
+  /* ── dspic33AKESC-Simplified real units (firmware-scaled on-chip) ──
+   * Only meaningful when `simplified` is true (snapshot is exactly 68B); 0/false
+   * otherwise. eRPM and currents are already real; vbusV uses the firmware's own
+   * divider (23.2) rather than the Studio default. */
+  erpmReal: number;
+  vbusV: number;
+  simplified: boolean;
 }
 
 /* ── Board IDs ─────────────────────────────────────────────── */
@@ -120,6 +127,14 @@ export const DETECT_PHASE_NAMES = ['Idle', 'Measuring Rs', 'Measuring Ls', 'Re-A
  * holds 5055 (kept since profile defaults haven't been rewritten). */
 export const PROFILE_NAMES = ['Hurst Long (300W)', 'A2212 1400KV', '2810 1350KV', '5055 580KV', 'Custom'] as const;
 export const PROFILE_COUNT = 4; /* built-in profiles (excl. Custom) */
+
+/* Display-only names by profile id, covering ids the (write-)selector array above
+ * doesn't - e.g. the dspic33AKESC-Simplified compile-time motors GET_INFO reports
+ * (6 = VEX, 9 = U3). Used for SHOWING the connected board's profile, not selection. */
+export const PROFILE_DISPLAY_NAMES: Record<number, string> = {
+  0: 'Hurst Long (300W)', 1: 'A2212 1400KV', 2: '2810 1350KV', 3: '5055 580KV',
+  4: 'Custom', 6: 'VEX 4000KV', 9: 'U3 KV700',
+};
 
 export const PARAM_NAMES: Record<number, string> = {
   // Startup & Ramp (group 0)

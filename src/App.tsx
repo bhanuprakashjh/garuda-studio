@@ -141,7 +141,11 @@ function TopHud() {
     if (snapshot.stepPeriod > 0) return Math.round((info?.pwmFrequency ?? 45000) * 10 / snapshot.stepPeriod).toLocaleString();
     return '0';
   })();
-  const vbus = snapshot ? (snapshot.vbusRaw * 3.3 / 4096 * 19.8).toFixed(1) : '—';
+  // Simplified firmware ships Vbus in real volts (its own 23.2 divider); other
+  // firmware is scaled here from the raw ADC count with the Studio default divider.
+  const vbus = !snapshot ? '—'
+    : snapshot.simplified ? snapshot.vbusV.toFixed(1)
+    : (snapshot.vbusRaw * 3.3 / 4096 * 19.8).toFixed(1);
   return (
     <div className="glass" style={{
       display: 'flex', alignItems: 'center', gap: 16, height: 56, padding: '0 18px',
