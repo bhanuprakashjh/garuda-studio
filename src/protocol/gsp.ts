@@ -60,10 +60,13 @@ export class GspParser {
           if (b === START_BYTE) this.state = 'GOT_START';
           break;
         case 'GOT_START':
-          /* Match firmware's GSP_MAX_PAYLOAD_LEN (251). pktLen = 1 + payload,
-           * so cap is 252. AK port's V4 TELEM_FRAME ships a 250-byte payload
-           * (pktLen=251); the old 249 cap silently dropped every frame. */
-          if (b >= 1 && b <= 252) {
+          /* LEN byte = pktLen = 1 (cmdId) + payload. Firmware
+           * GSP_MAX_PAYLOAD_LEN is 254 (gsp.c), so the max LEN is 255. The
+           * AN1078 FOC snapshot is a 254-byte payload (GSP_SNAPSHOT_T ⇒
+           * LEN=255); the old 252 cap silently DROPPED every snapshot frame,
+           * so telemetry never arrived while short command frames still worked.
+           * pktBuf is 256 bytes, so pktLen up to 255 fits. */
+          if (b >= 1 && b <= 255) {
             this.pktLen = b;
             this.pktIdx = 0;
             this.crcIdx = 0;
