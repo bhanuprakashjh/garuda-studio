@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GspInfo, GspSnapshot, GspRxStatus, ParamDescriptor, ScopeSample, ScopeStatus } from '../protocol/types';
+import type { GspInfo, GspSnapshot, GspRxStatus, ParamDescriptor, ScopeSample, ScopeStatus, AtaDiag } from '../protocol/types';
 
 export type TabId = 'dashboard' | 'scope' | 'sim' | 'zclab' | 'tune' | 'wizard' | 'params' | 'console' | 'help';
 
@@ -31,6 +31,7 @@ interface EscStore {
   scopeStatus: ScopeStatus | null;
   scopeSamples: ScopeSample[];
   scopeReading: boolean;
+  ataDiag: AtaDiag | null;
   burstPacketHandler?: (cmd: number, payload: Uint8Array) => void;
 
   setConnected: (v: boolean) => void;
@@ -75,6 +76,7 @@ export const useEscStore = create<EscStore>((set) => ({
   scopeStatus: null,
   scopeSamples: [],
   scopeReading: false,
+  ataDiag: null,
 
   setConnected: (v) => set({ connected: v }),
   setInfo: (info) => set({ info, activeProfile: info.motorProfile }),
@@ -125,6 +127,6 @@ export const useEscStore = create<EscStore>((set) => ({
     history: [], params: new Map(), activeProfile: 0, rxStatus: null,
     throttleSource: 'ADC', telemActive: false, toasts: [],
     paramModalOpen: false, activeTab: 'dashboard',
-    scopeStatus: null, scopeSamples: [], scopeReading: false,
+    scopeStatus: null, scopeSamples: [], scopeReading: false, ataDiag: null,
   }),
 }));

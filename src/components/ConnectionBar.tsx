@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { useEscStore } from '../store/useEscStore';
 import { SerialManager } from '../protocol/serial';
-import { GspParser, buildPacket, CMD, decodeScopeStatus, decodeScopeSamples } from '../protocol/gsp';
+import { GspParser, buildPacket, CMD, decodeScopeStatus, decodeScopeSamples, decodeAtaDiag } from '../protocol/gsp';
 import { decodeInfo, decodeSnapshot, decodeParamList, decodeParamValue } from '../protocol/decode';
 import type { ParamDescriptor, ParamListPage } from '../protocol/types';
 
@@ -153,6 +153,14 @@ export function ConnectionBar() {
               addToast(`Scope: ${useEscStore.getState().scopeSamples.length} samples read`, 'success');
             }
           }
+        }
+        break;
+      }
+      case CMD.ATA_DIAG: {
+        // GarudaESE gate-driver diagnostics one-shot reply (13 bytes).
+        // Reading is destructive — the SIR fault regs are read-to-clear on the device.
+        if (payload.length >= 13) {
+          useEscStore.setState({ ataDiag: decodeAtaDiag(payload) });
         }
         break;
       }

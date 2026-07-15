@@ -3,6 +3,7 @@ import { useEscStore } from '../store/useEscStore';
 import { serial } from './ConnectionBar';
 import { buildPacket, CMD } from '../protocol/gsp';
 import { ESC_STATES, FAULT_CODES, PARAM_NAMES } from '../protocol/types';
+import type { AtaDiag } from '../protocol/types';
 import { localDiagnose } from '../sim/diagnose';
 
 interface Line { t: number; text: string; kind: 'in' | 'out' | 'err' | 'sys' | 'telem'; }
@@ -57,7 +58,7 @@ export function ConsolePanel({ fill = false }: { fill?: boolean } = {}) {
     const arg = rest.join(' ');
     switch (c.toLowerCase()) {
       case 'help': case '?':
-        push('commands: help, clear, pause, resume, params, get <name>, set <name> <val>, reload, export, mark <txt>, rec, diagnose'); break;
+        push('commands: help, clear, pause, resume, params, get <name>, set <name> <val>, reload, save, defaults, export, mark <txt>, rec, ata, raw, diagnose'); break;
       case 'clear': setLines([]); break;
       case 'pause': paused.current = true; push('(telemetry mirror paused)', 'sys'); break;
       case 'resume': paused.current = false; push('(telemetry mirror resumed)', 'sys'); break;
@@ -88,7 +89,15 @@ export function ConsolePanel({ fill = false }: { fill?: boolean } = {}) {
         push('  requested param list'); break;
       case 'export': exportC(); break;
       case 'mark': push('— ' + (arg || 'mark') + ' —', 'sys'); if (recording) recRef.current.push({ _mark: arg }); break;
-      case 'rec': case 'save': toggleRec(); break;
+      case 'rec': toggleRec(); break;
+      case 'save':
+        await serial.write(buildPacket(CMD.SAVE_CONFIG)).catch(() => {});
+        push('flash save → writing param table (motor must be stopped)…', 'sys'); break;
+      case 'defaults':
+        await serial.write(buildPacket(CMD.LOAD_DEFAULTS)).catch(() => {});
+        push("factory defaults → restoring (RAM only until 'save')…", 'sys'); break;
+      case 'ata': await ataDiag(); break;
+      case 'raw': rawDump(); break;
       case 'diagnose': diagnose(); break;
       default: push(`unknown command: ${c} (try help)`, 'err');
     }
@@ -122,6 +131,34 @@ export function ConsolePanel({ fill = false }: { fill?: boolean } = {}) {
       downloadText(csv, `garuda_telemetry_${rows.length}.csv`);
       push(`■ saved ${rows.length} samples → CSV`, 'sys');
     }
+  };
+
+  // ATA6847 gate-driver diagnostics — request/response one-shot. Write the
+  // request, wait (≤1.2s) for the RX switch to land the reply in the store, then
+  // print. NOTE the read is destructive: the SIR fault regs are read-to-clear.
+  const ataDiag = async () => {
+    store.setState({ ataDiag: null });
+    await serial.write(buildPacket(CMD.ATA_DIAG)).catch(() => {});
+    const d = await new Promise<AtaDiag | null>((resolve) => {
+      let unsub = () => {};
+      const timer = setTimeout(() => { unsub(); resolve(null); }, 1200);
+      unsub = store.subscribe((st) => {
+        if (st.ataDiag) { clearTimeout(timer); unsub(); resolve(st.ataDiag); }
+      });
+    });
+    if (!d) { push('ata: no reply (connected?)', 'err'); return; }
+    formatAtaDiag(d).forEach(l => push(l));
+  };
+
+  // Dump the current-sense chain from the latest snapshot (local, no protocol).
+  const rawDump = () => {
+    const s = store.getState().snapshot;
+    if (!s) { push('no snapshot yet — connect first', 'err'); return; }
+    const sgn = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(3);
+    push('current-sense chain (raw ADC counts, healthy bias ≈ 2048):');
+    push(`  focOffsetIa = ${s.focOffsetIa}   focOffsetIb = ${s.focOffsetIb}   (boot calibration)`);
+    push(`  focIa = ${sgn(s.focIa)} A   focIb = ${sgn(s.focIb)} A   (offset-subtracted)`);
+    push(`  vbusRaw-derived Vbus = ${s.vbusV.toFixed(2)} V   state = ${ESC_STATES[s.state] ?? s.state}`);
   };
 
   const diagnose = () => {
@@ -188,6 +225,21 @@ function mirrorLine(s: any, pwm: number): string {
   return `${st} thr=${String(s.throttle).padStart(4)} duty=${String(s.dutyPct).padStart(3)}% ` +
     `eRPM=${String(deriveErpm(s, pwm)).padStart(7)} Vbus=${(s.vbusRaw * 3.3 / 4096 * 19.8).toFixed(1)} ` +
     `Ibus=${(s.ibusAvgA ?? 0).toFixed(1)} Ia=${(s.iaPkMagA ?? 0).toFixed(1)}${f}`;
+}
+/** Mirrors the Python _log_ata_diag() output verbatim. */
+function formatAtaDiag(d: AtaDiag): string[] {
+  const hx = (n: number) => n.toString(16).toUpperCase().padStart(2, '0');
+  const gdus = (d.DSR1 !== 0xFF && (d.DSR1 & 0x04)) ? 'NORMAL' : 'NOT normal';
+  const sirs = [d.SIR1, d.SIR2, d.SIR3, d.SIR4, d.SIR5].map((v, i) => `SIR${i + 1}=${hx(v)}`).join(' ');
+  const faults = [d.SIR1, d.SIR2, d.SIR3, d.SIR4, d.SIR5].some(v => v !== 0);
+  const lines = [
+    'ATA6847 gate driver:',
+    `  DSR1=${hx(d.DSR1)} (${gdus})  DSR2=${hx(d.DSR2)}  GOPMCR=${hx(d.GOPMCR)}`,
+    `  ${sirs}` + (faults ? '   ← LATCHED FAULT FLAGS (now cleared by this read)' : '   (no latched faults)'),
+    `  last GDU bring-up: result=${d.lastGduResult} attempts=${d.lastGduAttempts} dsr1=${hx(d.lastDsr1AtNormal)}  ataReady=${d.ataReady}`,
+  ];
+  if (d.DSR1 === 0xFF) lines.push('  ⚠ DSR1=FF: SPI likely not answering (all-ones bus)');
+  return lines;
 }
 function downloadText(text: string, name: string) {
   const blob = new Blob([text], { type: 'text/plain' });

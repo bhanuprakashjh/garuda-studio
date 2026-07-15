@@ -119,6 +119,23 @@ export interface ParamDescriptor {
   max: number;
 }
 
+/* GarudaESE ATA6847 gate-driver diagnostics (CMD_ATA_DIAG reply, 13 bytes).
+ * NOTE: reading is destructive — the SIR fault registers are read-to-clear. */
+export interface AtaDiag {
+  DSR1: number;
+  DSR2: number;
+  SIR1: number;
+  SIR2: number;
+  SIR3: number;
+  SIR4: number;
+  SIR5: number;
+  GOPMCR: number;
+  lastDsr1AtNormal: number;
+  lastGduAttempts: number;
+  lastGduResult: number;
+  ataReady: number;
+}
+
 export interface ParamListPage {
   totalCount: number;
   startIndex: number;

@@ -132,14 +132,28 @@ export const CMD = {
   SCOPE_ARM: 0x30,
   SCOPE_STATUS: 0x31,
   SCOPE_READ: 0x32,
+  ATA_DIAG: 0x40,        // GarudaESE: ATA6847 gate-driver status/fault registers
   TELEM_FRAME: 0x80,
   ERROR: 0xFF,
 } as const;
 
 /* ── Burst Scope Helpers ─────────────────────────────────────── */
 
-import type { ScopeSample, ScopeStatus, ScopeArmConfig } from './types';
+import type { ScopeSample, ScopeStatus, ScopeArmConfig, AtaDiag } from './types';
 import { SCOPE_SAMPLE_SIZE } from './types';
+
+/** Decode the 13-byte CMD_ATA_DIAG reply (GarudaESE ATA6847 gate driver). */
+export function decodeAtaDiag(p: Uint8Array): AtaDiag {
+  return {
+    DSR1: p[0], DSR2: p[1],
+    SIR1: p[2], SIR2: p[3], SIR3: p[4], SIR4: p[5], SIR5: p[6],
+    GOPMCR: p[7],
+    lastDsr1AtNormal: p[8],
+    lastGduAttempts: p[9] | (p[10] << 8),
+    lastGduResult: p[11],
+    ataReady: p[12],
+  };
+}
 
 export function buildScopeArmPayload(cfg: ScopeArmConfig): Uint8Array {
   const buf = new Uint8Array(8);
