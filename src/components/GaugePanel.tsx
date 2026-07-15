@@ -105,6 +105,7 @@ export function GaugePanel() {
     vbus: 0, ibus: 0, ibusPeak: 0,
     focRpm: 0, focSpeedRads: 0, focPowerW: 0,
     focIq: 0, focId: 0, focIa: 0, focIb: 0,
+    focIw: 0, focIbusCsa: 0, tempC: 0,
     focTheta: 0, focThetaObs: 0, focVbus: 0,
     eRPM: 0, mechRPM: 0, duty: 0,
   });
@@ -161,6 +162,10 @@ export function GaugePanel() {
   s.focId = ema(s.focId, snapshot.focIdMeas);
   s.focIa = ema(s.focIa, snapshot.focIa);
   s.focIb = ema(s.focIb, snapshot.focIb);
+  // AN1078 254B tail — only present on new-format snapshots (null otherwise)
+  if (snapshot.focIw_A != null) s.focIw = ema(s.focIw, snapshot.focIw_A);
+  if (snapshot.focIbus_A != null) s.focIbusCsa = ema(s.focIbusCsa, snapshot.focIbus_A);
+  if (snapshot.tempC != null) s.tempC = ema(s.tempC, snapshot.tempC);
   s.focTheta = ema(s.focTheta, snapshot.focTheta);
   s.focThetaObs = ema(s.focThetaObs, snapshot.focThetaObs);
   s.focVbus = ema(s.focVbus, snapshot.focVbus);
@@ -262,6 +267,16 @@ export function GaugePanel() {
         }}>
           <StatCard label="Ia" value={s.focIa.toFixed(1)} unit="A" color="#a78bfa" stale={isStale} />
           <StatCard label="Ib" value={s.focIb.toFixed(1)} unit="A" color="#c084fc" stale={isStale} />
+          {snapshot.focIw_A != null && (
+            <StatCard label="Iw" value={s.focIw.toFixed(1)} unit="A" color="#e879f9" stale={isStale} />
+          )}
+          {snapshot.focIbus_A != null && (
+            <StatCard label="Ibus (CSA)" value={s.focIbusCsa.toFixed(1)} unit="A"
+              sub="real bus current" color="var(--accent-yellow)" stale={isStale} />
+          )}
+          {snapshot.tempC != null && (
+            <StatCard label="Temp" value={s.tempC.toFixed(1)} unit="°C" color="var(--accent-red)" stale={isStale} />
+          )}
           <StatCard label="Theta" value={Math.round(s.focTheta * 180 / Math.PI).toString()} unit="deg" color="#22d3ee" stale={isStale} />
           <StatCard label="Obs Theta" value={Math.round(s.focThetaObs * 180 / Math.PI).toString()} unit="deg" color="#06b6d4" stale={isStale} />
           <StatCard label="Mech RPM" value={focRpm.toLocaleString()} unit=""

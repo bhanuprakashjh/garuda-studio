@@ -70,6 +70,16 @@ export interface GspSnapshot {
   focSubState: number;
   focOffsetIa: number;
   focOffsetIb: number;
+  /* ── AN1078 FOC 254B tail (snapshot grew 248→254B, 2026-07-14) ──
+   * Real 3rd-phase current (Iw, best-2-of-3), real DC-bus current (Ibus,
+   * ATA CSA — valley-sampled, under-reads at low duty, not for protection),
+   * and NTC board temperature. int16 centi-amps @248/@250 + raw NTC counts
+   * @252. null when the snapshot is the older/shorter format (mirrors
+   * decode.py leaving them None). tempC is also null on open/short NTC. */
+  focIw_A: number | null;
+  focIbus_A: number | null;
+  tempC: number | null;
+  tempRaw: number;
   /* ── 6-step AKESC v3 tail (length-guarded; 0/[] when the snapshot is shorter) ──
    * Engineering-derived bus current: the firmware exposes three views.
    *   ibusInstA — valley-sampled instantaneous (UNRELIABLE: phantom ~-20A idle)
@@ -120,19 +130,19 @@ export const FAULT_CODES = ['NONE', 'OVERVOLTAGE', 'UNDERVOLTAGE', 'OVERCURRENT'
 export const FOC_SUB_STATES = ['IDLE', 'ARMED', 'ALIGN', 'I/F RAMP', 'CLOSED_LOOP'] as const;
 export const DETECT_PHASE_NAMES = ['Idle', 'Measuring Rs', 'Measuring Ls', 'Re-Aligning', 'Measuring Lambda', 'Auto-Tuning', 'Complete', 'Failed'] as const;
 
-/* Profile slot 2 was originally "5010 750KV" but is now repurposed for the
- * PRODRONE 2810 (1350 KV) — see dspic33AKESC/foc/an1078_params.h.  The
- * label needs to match what the firmware tunes for; mismatched labels
- * caused user confusion when tuning AN1078 for the 2810.  Slot 3 still
- * holds 5055 (kept since profile defaults haven't been rewritten). */
-export const PROFILE_NAMES = ['Hurst Long (300W)', 'A2212 1400KV', '2810 1350KV', '5055 580KV', 'Custom'] as const;
+/* Profile slot 2 (originally "5010 750KV", then the PRODRONE 2810) now holds
+ * the T-Motor U3 KV700 — see dspic33AKESC motors.h / an1078_params.h
+ * (GSP_PROFILE_U3 = 2; the slot value stays 2 for EEPROM compat).  The label
+ * must match what the firmware tunes for.  Slot 3 still holds 5055 (kept
+ * since profile defaults haven't been rewritten). */
+export const PROFILE_NAMES = ['Hurst Long (300W)', 'A2212 1400KV', 'U3-KV700', '5055 580KV', 'Custom'] as const;
 export const PROFILE_COUNT = 4; /* built-in profiles (excl. Custom) */
 
 /* Display-only names by profile id, covering ids the (write-)selector array above
  * doesn't - e.g. the dspic33AKESC-Simplified compile-time motors GET_INFO reports
  * (6 = VEX, 9 = U3). Used for SHOWING the connected board's profile, not selection. */
 export const PROFILE_DISPLAY_NAMES: Record<number, string> = {
-  0: 'Hurst Long (300W)', 1: 'A2212 1400KV', 2: '2810 1350KV', 3: '5055 580KV',
+  0: 'Hurst Long (300W)', 1: 'A2212 1400KV', 2: 'U3-KV700', 3: '5055 580KV',
   4: 'Custom', 6: 'VEX 4000KV', 9: 'U3 KV700',
 };
 
@@ -205,6 +215,26 @@ export const PARAM_NAMES: Record<number, string> = {
   0x91: 'AN1078 Theta Offset K [an1078ThetaKE7]',
   0x92: 'AN1078 SMC Kslide [an1078KslideMv]',
   0x93: 'AN1078 FW Max |Id| [an1078IdFwMaxDecia]',
+  /* ── Params advertised by current firmware but previously unnamed in the
+   * studio (mirrors garuda_gsp/protocol.py PARAM_NAMES exactly). protocol.py
+   * carries no units/tooltips/groups for these, so those tables stay silent. */
+  // WS1 load-adaptive demag blank, WS2 phase-stall fault
+  0x5B: 'zcDemagBlankPerA', 0x5C: 'zcDemagBlankIbusDb',
+  0x5D: 'stallIphaseAdc', 0x5E: 'stallDebounceMs', 0x5F: 'stallArmErpm',
+  // AN_STA super-twisting observer tuning (FEATURE_AN_STA build)
+  0x94: 'staK1bMilli', 0x95: 'staK1aE6',
+  0x96: 'staK2b', 0x97: 'staK2aE6',
+  0x98: 'staWClampFloorMv', 0x99: 'staThetaBaseDegX10',
+  0x9A: 'staThetaKlatE7',
+  // WS3 duty-adaptive BEMF sample trigger + WS1 demag blank cap
+  0x9B: 'bemfTrigBasePct', 0x9C: 'bemfTrigDutyThreshPct', 0x9D: 'bemfTrigShiftQ',
+  0x9E: 'zcDemagBlankMaxPct',
+  // Diag / FOC OC-forensics latch (dual-purpose spares)
+  0xA0: 'dbgMinStepPeriod', 0xA1: 'dbgMistimeEvents',
+  0xA2: 'dbgFeSamples', 0xA3: 'dbgFeVoteResets',
+  0xA4: 'dbgFeD3Min', 0xA5: 'dbgFeD3Max',
+  // OL→CL handoff settling-window iqRef clamp (both observers, live-tunable)
+  0xB0: 'handoffSettleTicks', 0xB1: 'handoffIqCapCa',
 };
 
 export const PARAM_UNITS: Record<number, string> = {

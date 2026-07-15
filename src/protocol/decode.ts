@@ -16,6 +16,26 @@ export function decodeInfo(data: Uint8Array): GspInfo {
   };
 }
 
+/* ── NTC temperature (GarudaESE) — mirrors garuda_gsp/protocol.py ─────────
+ * +3.3V -> TH1 (10k NTC) -> TEMP node -> R65 (4.7k) -> GND, read on AD3AN5.
+ * NTC on TOP: resistance FALLS as it heats -> counts RISE with temperature.
+ *   R_ntc = R_fix * (4095/counts - 1);  1/T = 1/T0 + (1/Beta)*ln(R_ntc/R25)
+ * BETA UNCONFIRMED on this board — 3435 typical for a 10k 0402 NTC. */
+const NTC_R_FIXED = 4700.0;   // R65 (node -> GND)
+const NTC_R25 = 10000.0;      // TH1 nominal @25 C
+const NTC_BETA = 3435.0;      // UNCONFIRMED — bench-calibrate
+const NTC_T0_K = 298.15;      // 25 C in Kelvin
+
+/** Convert raw NTC ADC counts (0..4095) to degrees Celsius. Returns null
+ * for non-physical readings (open/short). */
+function ntcCountsToC(counts: number): number | null {
+  if (counts <= 0 || counts >= 4095) return null;
+  const rNtc = NTC_R_FIXED * (4095.0 / counts - 1.0);
+  if (rNtc <= 0.0) return null;
+  const invT = 1.0 / NTC_T0_K + (1.0 / NTC_BETA) * Math.log(rNtc / NTC_R25);
+  return 1.0 / invT - 273.15;
+}
+
 export function decodeSnapshot(data: Uint8Array): GspSnapshot {
   const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const hasDiag = data.byteLength >= 150;  // v3: observer/PI/diag fields
@@ -74,6 +94,24 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
       ibPkMagA = Math.max(Math.abs(adcToA(v.getUint16(182, true))), Math.abs(adcToA(v.getUint16(184, true))));
     }
   }
+  /* ── AN1078 FOC 254B tail (mirrors decode.py struct.unpack_from("<hhH", p, 248)) ──
+   * Real 3rd-phase current (Iw, best-2-of-3), real DC-bus current (Ibus, ATA CSA),
+   * and NTC temperature. Compact int16 centi-amps + raw NTC counts appended at
+   * offset 248 (snapshot grew 248→254B). Only populated in the AN1078 FOC build;
+   * older/other builds stop before 254 → null (matches decode.py's None). */
+  let focIw_A: number | null = null;
+  let focIbus_A: number | null = null;
+  let tempC: number | null = null;
+  let tempRaw = 0;
+  if (n >= 254) {
+    const iwCa = v.getInt16(248, true);
+    const ibusCa = v.getInt16(250, true);
+    tempRaw = v.getUint16(252, true);
+    focIw_A = iwCa / 100;
+    focIbus_A = ibusCa / 100;
+    tempC = ntcCountsToC(tempRaw);
+  }
+
   const hwzcReject = n >= 174 ? v.getUint32(170, true) : 0;
   const cpuLoadPct = n >= 242 ? v.getUint16(228, true) / 10 : 0;
   const missBySector = n >= 242
@@ -140,6 +178,8 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
     focSubState: hasDiag ? v.getUint8(144) : (hasFocVdVq ? v.getUint8(108) : (hasFoc ? v.getUint8(100) : 0)),
     focOffsetIa: hasDiag ? v.getUint16(146, true) : (hasFocVdVq ? v.getUint16(110, true) : (hasFoc ? v.getUint16(102, true) : 0)),
     focOffsetIb: hasDiag ? v.getUint16(148, true) : (hasFocVdVq ? v.getUint16(112, true) : (hasFoc ? v.getUint16(104, true) : 0)),
+    // AN1078 FOC 254B tail (null when snapshot < 254B)
+    focIw_A, focIbus_A, tempC, tempRaw,
     // 6-step AKESC v3 tail
     ibusInstA, ibusAvgA, ibusWinA, hwzcReject, iaPkMagA, ibPkMagA,
     cpuLoadPct, missBySector, snapBytes: n,
