@@ -5,6 +5,16 @@ Browser-based configurator and live telemetry for the Garuda 6-step BLDC ESC
 **Web Serial API** — no install, no driver, no Python broker. Hosted as a static
 site on GitHub Pages, so anyone on Windows/macOS/Linux can use it from a link.
 
+Live page: <https://bhanuprakashjh.github.io/garuda-studio/>
+
+## Documentation
+
+- **[USER_MANUAL.md](USER_MANUAL.md)** — how to use it: safety, quick start,
+  every tab, console commands, troubleshooting, and what differs from the
+  Python desktop GUI.
+- **[CLAUDE.md](CLAUDE.md)** — for developers and AI assistants: code layout,
+  build/deploy, protocol rules, known rough edges.
+
 ## Use it
 
 Open the deployed page in **Chrome or Edge** (Web Serial is Chromium-only;
@@ -15,7 +25,11 @@ directly.
 > Web Serial requires a secure context. GitHub Pages is HTTPS, so it works from
 > the hosted URL. For local dev, `http://localhost` also counts as secure.
 
-## Features (v1)
+## Features
+
+Tabs today: Mission Control, Scope (live + burst scope + local diagnosis),
+ZC Sim, ZC Lab, Live Tune, Motor Wizard, Parameters, Help, plus a console dock.
+The manual describes each one. Highlights:
 
 - **Dashboard** — state/fault/uptime, eRPM, Vbus, duty, and *trustworthy* bus
   current (firmware IIR average + signed PWM-window peak, not the phantom valley
@@ -27,7 +41,8 @@ directly.
   zero-cross above ~70k: true vs measured ZC position and the timer-extrapolation
   error across eRPM. TypeScript port of `tools/garuda_debug/garuda_gui/zcsim*.py`.
 
-AKESC 6-step only (the CK/ATA6847 board path was removed for this build).
+Supports the 6-step and AN1078 FOC firmware builds on the dsPIC33AK boards
+(the CK board path was removed for this build).
 
 ## Develop
 
@@ -52,5 +67,5 @@ npm run preview  # serve the built dist/ locally
 
 The TypeScript GSP decoder (`src/protocol/`) mirrors the Python reference in
 `tools/garuda_debug/garuda_gsp/`. The snapshot decode tracks GSP v3, including
-the 248-byte snapshot with `ibusAvg`. Keep the two in sync when the firmware
-snapshot layout changes.
+snapshots from 68 to 254 bytes, decoded by payload length. Keep the two in sync
+when the firmware snapshot layout changes; see CLAUDE.md.
