@@ -141,13 +141,15 @@ CRC16-CCITT (poly 0x1021, init 0xFFFF) over LEN, CMD and payload.
 - **Help tab hardware block** (`HW_INFO` in `HelpPanel.tsx`) is static text and
   is out of date in places (it says GSP v2 and 24 kHz PWM). The feature list is
   static too; only the Enabled/Disabled badges are live.
-- **Profile names.** `PROFILE_NAMES` / `PROFILE_DISPLAY_NAMES` in `types.ts`
-  cover the older numbering. Firmware 1.x (`garuda-ak512-6step`) renumbered
-  profiles from zero; the Python side handles this with `PROFILE_NAMES_V1`
-  chosen by firmware major version. Not ported yet.
-- **Not yet ported from Python** (as of 2026-11-18): the rising/falling
-  zero-cross capture readout (`cap_rise_pm` / `cap_fall_pm` / `pi_nocap`, valid
-  only when the snapshot's `speedPiEnabled` byte is the `0xDD` marker).
+- **Profile names.** Firmware 1.x (`garuda-ak512-6step`) renumbered profiles
+  from zero. Display goes through `profileDisplayName(id, fwMajor)` in
+  `types.ts`, which picks `PROFILE_NAMES_V1` for major ≥ 1 (same rule as the
+  Python side). `ProfileSelector.tsx` — the buttons that LOAD a profile — still
+  uses the older `PROFILE_NAMES` array and is wrong for firmware 1.x.
+- **Reused snapshot slots.** `capRisePm` / `capFallPm` / `piNoCap` are read from
+  the speed-PI slots at offsets 208–219 and are valid only when byte 208 is the
+  `0xDD` marker (`capDiagValid`). Keep that gate. Ported 2026-11-18, type-checked
+  and built but not yet run against a board.
 - **`TabId` includes `'console'`** but there is no console tab; the console is
   the bottom dock.
 

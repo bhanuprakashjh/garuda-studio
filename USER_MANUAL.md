@@ -214,6 +214,13 @@ Type in the box at the bottom of the console dock and press Enter.
 Files are saved through the browser's normal download mechanism, into your
 Downloads folder.
 
+On the 6-step bring-up firmware the telemetry mirror also shows the zero-cross
+capture split: `cR` and `cF` are where in the sector the rising and falling
+zero-cross landed (per-mille of the sector period), `d` is `cR − cF`, and `nc`
+counts control-loop events with no capture. A large or growing `d` means the
+detector is the limit. The fields are omitted when the firmware is not sending
+them.
+
 ---
 
 ## 7. Troubleshooting
@@ -246,9 +253,9 @@ Compared with the standalone Python GUI:
   rule engine is ported.
 - **No simulator connection.** The Python GUI can run against the software
   motor twin; Studio needs a real board.
-- **Not yet ported** (in the Python GUI since late 2026): the rising/falling
-  zero-cross capture readout, and the 0-based motor-profile names for firmware
-  1.x. Against firmware 1.x, Studio may show the wrong profile name.
+- **Profile selector on firmware 1.x.** Studio shows the correct profile name
+  for firmware 1.x, but the selector buttons still list the older profile
+  numbering. Do not load a profile from Studio on firmware 1.x.
 
 Known scaling difference: for firmware other than the Simplified build, Studio
 converts the raw bus-voltage reading with a divider ratio of 19.8, while the

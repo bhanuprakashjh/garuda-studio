@@ -219,12 +219,21 @@ function rowOf(s: any, pwm: number) {
     ibusAvg: (s.ibusAvgA ?? 0).toFixed(2), iaPk: (s.iaPkMagA ?? 0).toFixed(2), cpu: (s.cpuLoadPct ?? 0).toFixed(0),
   };
 }
+/* HWZC capture split, shown only when the firmware flags the slots as valid
+ * (mirrors the Python live line: cR/cF per-mille of sector, d = cR-cF, nc). */
+function capSplit(s: any): string {
+  if (!s.capDiagValid) return '';
+  const cr = s.capRisePm, cf = s.capFallPm;
+  const d = cr && cf ? cr - cf : 0;
+  return ` cR=${String(cr).padStart(4)} cF=${String(cf).padStart(4)} ` +
+    `d=${(d >= 0 ? '+' : '') + d} nc=${s.piNoCap}`;
+}
 function mirrorLine(s: any, pwm: number): string {
   const st = (ESC_STATES[s.state] ?? `?${s.state}`).padEnd(11);
   const f = s.faultCode ? ' ' + (FAULT_CODES[s.faultCode] ?? s.faultCode) : '';
   return `${st} thr=${String(s.throttle).padStart(4)} duty=${String(s.dutyPct).padStart(3)}% ` +
     `eRPM=${String(deriveErpm(s, pwm)).padStart(7)} Vbus=${(s.vbusRaw * 3.3 / 4096 * 19.8).toFixed(1)} ` +
-    `Ibus=${(s.ibusAvgA ?? 0).toFixed(1)} Ia=${(s.iaPkMagA ?? 0).toFixed(1)}${f}`;
+    `Ibus=${(s.ibusAvgA ?? 0).toFixed(1)} Ia=${(s.iaPkMagA ?? 0).toFixed(1)}${capSplit(s)}${f}`;
 }
 /** Mirrors the Python _log_ata_diag() output verbatim. */
 function formatAtaDiag(d: AtaDiag): string[] {

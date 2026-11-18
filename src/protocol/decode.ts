@@ -112,6 +112,15 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
     tempC = ntcCountsToC(tempRaw);
   }
 
+  /* HWZC capture split (mirrors Python decode.py cap_rise_pm/cap_fall_pm/pi_nocap).
+   * The 6-step bring-up build REUSES the speed-PI slots @208..219 for detector
+   * diagnostics and sets speedPiEnabled (@208) to the 0xDD marker when it does.
+   * Without the marker these bytes are not ours — report invalid, not numbers. */
+  const capDiagValid = n >= 228 && v.getUint8(208) === 0xDD;
+  const piNoCap = capDiagValid ? v.getUint16(210, true) : 0;
+  const capRisePm = capDiagValid ? v.getUint32(212, true) : 0;
+  const capFallPm = capDiagValid ? v.getInt32(216, true) : 0;
+
   const hwzcReject = n >= 174 ? v.getUint32(170, true) : 0;
   const cpuLoadPct = n >= 242 ? v.getUint16(228, true) / 10 : 0;
   const missBySector = n >= 242
@@ -183,6 +192,7 @@ export function decodeSnapshot(data: Uint8Array): GspSnapshot {
     // 6-step AKESC v3 tail
     ibusInstA, ibusAvgA, ibusWinA, hwzcReject, iaPkMagA, ibPkMagA,
     cpuLoadPct, missBySector, snapBytes: n,
+    capDiagValid, capRisePm, capFallPm, piNoCap,
     // dspic33AKESC-Simplified real units (0 / false for other firmware)
     erpmReal, vbusV, simplified: isSimplified,
   };

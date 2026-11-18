@@ -93,6 +93,14 @@ export interface GspSnapshot {
   ibPkMagA: number;
   cpuLoadPct: number;
   missBySector: number[];
+  /* HWZC capture split (6-step bring-up build only; valid when capDiagValid).
+   * Where in the sector each polarity's ZC landed, per-mille of the sector
+   * period: rising = HW comparator, falling = SW OFF-centre sample.
+   * piNoCap = PI events that fired with no capture. */
+  capDiagValid: boolean;
+  capRisePm: number;
+  capFallPm: number;
+  piNoCap: number;
   snapBytes: number;
   /* ── dspic33AKESC-Simplified real units (firmware-scaled on-chip) ──
    * Only meaningful when `simplified` is true (snapshot is exactly 68B); 0/false
@@ -162,6 +170,18 @@ export const PROFILE_DISPLAY_NAMES: Record<number, string> = {
   0: 'Hurst Long (300W)', 1: 'A2212 1400KV', 2: 'U3-KV700', 3: '5055 580KV',
   4: 'Custom', 6: 'VEX 4000KV', 9: 'U3 KV700',
 };
+
+/* Firmware 1.x (garuda-ak512-6step) renumbered profiles 0-based: Motor 1 = the
+ * VEX, Custom = 1. Mirrors Python protocol.PROFILE_NAMES_V1 (picked by fw major). */
+export const PROFILE_NAMES_V1: Record<number, string> = {
+  0: 'Motor1 VEX-4000KV', 1: 'Custom',
+};
+
+/** Name to SHOW for the connected board's profile id, by firmware major version. */
+export function profileDisplayName(id: number, fwMajor: number | undefined): string | undefined {
+  if ((fwMajor ?? 0) >= 1) return PROFILE_NAMES_V1[id];
+  return PROFILE_DISPLAY_NAMES[id] ?? PROFILE_NAMES[id];
+}
 
 export const PARAM_NAMES: Record<number, string> = {
   // Startup & Ramp (group 0)
